@@ -1,0 +1,224 @@
+import streamlit as st
+import io
+import speech_recognition as sr
+from pydub import AudioSegment
+from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis
+from router_agent import classify_intent, generate_financial_forecast, get_tts_bytes
+
+# 1. Page Config and Advanced Mark 42 Armor Hybrid Custom CSS Style Block
+st.set_page_config(page_title="J.A.R.V.I.S. CORE HUD", page_icon="🦾", layout="centered")
+
+st.markdown("""
+    <style>
+        /* Keyframe animation for the pulsing Arc Reactor core */
+        @keyframes reactorPulse {
+            0% {
+                background-image: 
+                    radial-gradient(circle at 50% 35%, rgba(0, 229, 255, 0.12) 0%, rgba(11, 2, 2, 0) 45%),
+                    radial-gradient(circle at 50% 30%, #200404 0%, #0b0202 70%);
+            }
+            50% {
+                background-image: 
+                    radial-gradient(circle at 50% 35%, rgba(0, 229, 255, 0.22) 0%, rgba(11, 2, 2, 0) 55%),
+                    radial-gradient(circle at 50% 30%, #2a0505 0%, #0b0202 70%);
+            }
+            100% {
+                background-image: 
+                    radial-gradient(circle at 50% 35%, rgba(0, 229, 255, 0.12) 0%, rgba(11, 2, 2, 0) 45%),
+                    radial-gradient(circle at 50% 30%, #200404 0%, #0b0202 70%);
+            }
+        }
+
+        /* Deep space cyber background with integrated animated Arc Reactor */
+        .stApp {
+            background-color: #0b0202;
+            color: #F7F1E3;
+            font-family: 'Courier New', Courier, monospace;
+            animation: reactorPulse 6s infinite ease-in-out;
+            background-attachment: fixed;
+        }
+        
+        /* Stark Industries Glow Header */
+        h1 {
+            color: #00E5FF !important;
+            text-shadow: 0 0 10px #00E5FF, 0 0 20px #aa0505;
+            letter-spacing: 4px;
+            font-weight: 900;
+            text-align: center;
+        }
+        
+        /* Sidebar Styling: Mark 42 Crimson Armor Plating with Gold Borders */
+        [data-testid="stSidebar"] {
+            background-color: #1a0505 !important;
+            border-right: 3px solid #b97d10 !important;
+            box-shadow: 5px 0px 15px rgba(185, 125, 16, 0.2);
+        }
+        
+        /* Chat Bubble Custom Formatting overrides */
+        .stChatMessage {
+            border-radius: 6px !important;
+            padding: 15px !important;
+            margin-bottom: 12px !important;
+            background-color: rgba(21, 5, 5, 0.85) !important;
+            border: 1px solid #4d0907 !important;
+        }
+        
+        [data-testid="stChatMessage"] div {
+            font-family: 'Courier New', Courier, monospace !important;
+        }
+        
+        .stCaption {
+            color: #b97d10 !important;
+            text-shadow: 0 0 3px rgba(185, 125, 16, 0.5);
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        hr {
+            border-color: #b97d10 !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("J.A.R.V.I.S.")
+st.caption("System operational. All modules online. Awaiting directives, sir.")
+
+# Analytics Control Console on Sidebar (Champagne Gold Accents)
+st.sidebar.markdown("<h3 style='color:#b97d10; text-shadow: 0 0 5px #b97d10;'>🛡️ ARMOR DIAGNOSTICS</h3>", unsafe_allow_html=True)
+
+# Multi-Asset Tracker Selector Matrix
+selected_ticker = st.sidebar.selectbox(
+    "Select Target Core Vector:",
+    options=["GOLDBEES", "SILVERBEES", "NIFTYBEES"],
+    index=0,
+    format_func=lambda x: {
+        "GOLDBEES": "🥇 GOLD BeES Monitor",
+        "SILVERBEES": "🥈 SILVER BeES Monitor",
+        "NIFTYBEES": "📈 NIFTY BeES Index"
+    }[x]
+)
+
+selected_timeframe = st.sidebar.selectbox(
+    "Select Trajectory Horizon:",
+    options=["5d", "1mo", "3mo", "1y"],
+    index=1,
+    format_func=lambda x: {
+        "5d": "Past Week [5 Days]",
+        "1mo": "Past Month [30 Days]",
+        "3mo": "Quarterly Trend [3M]",
+        "1y": "Annual Trend [1Y]"
+    }[x]
+)
+
+st.sidebar.markdown(f"""
+<div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px;'>
+    <span style='color: #00E5FF; font-size: 11px; font-weight: bold; letter-spacing: 1px;'>HUD CHANNEL FEED</span><br>
+    <span style='color: #4AF2A1; font-size: 12px;'>● ACTIVE VECT: {selected_ticker}</span><br>
+    <span style='color: #FCE154; font-size: 10px;'>CORE STABILITY: LOCKED</span>
+</div>
+""", unsafe_allow_html=True)
+
+# 2. Session State Initialization for Chat History
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {
+            "role": "assistant", 
+            "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."
+        }
+    ]
+if "audio_played" not in st.session_state:
+    st.session_state.audio_played = False
+
+# 3. Render Historical Chat Log using custom character identity tags
+for index, message in enumerate(st.session_state.messages):
+    if message["role"] == "user":
+        prefix = "T. STARK [COM-LINK]:"
+        text_color = "#FCC200" 
+    else:
+        prefix = "J.A.R.V.I.S.:"
+        text_color = "#00E5FF" 
+        
+    with st.chat_message(message["role"]):
+        st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> <span style='color:#E2F1FF;'>{message['content']}</span>", unsafe_allow_html=True)
+        
+        # Only autoplay audio if it's the latest assistant message AND it hasn't been played yet
+        if message["role"] == "assistant" and (index == len(st.session_state.messages) - 1) and not st.session_state.audio_played:
+            with st.spinner("Initializing vocal transmission channels..."):
+                audio_bytes = get_tts_bytes(message["content"])
+                if audio_bytes:
+                    st.audio(audio_bytes, format="audio/wav", autoplay=True)
+                    st.session_state.audio_played = True  # Lock it so re-runs don't replay it
+
+# 4. Input Controls
+if "mic_rotation_counter" not in st.session_state:
+    st.session_state.mic_rotation_counter = 0
+
+widget_key = f"voice_recorder_v_{st.session_state.mic_rotation_counter}_{selected_ticker}"
+audio_file = st.audio_input("🎙️ ACTIVATE VOCAL RECEIVER", key=widget_key)
+user_text_input = st.chat_input("Input terminal override command here...")
+
+processed_prompt = None
+
+# 5. Pipeline Phase 1: Input Audio Capture & Transcoded Cloud STT Processing
+if audio_file:
+    with st.spinner("Decoding vocal sequence arrays..."):
+        try:
+            audio_bytes_raw = audio_file.read()
+            
+            # Use pydub to safely transcode whatever compression format the browser spits out into a uniform WAV
+            audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes_raw))
+            wav_buffer = io.BytesIO()
+            audio_segment.export(wav_buffer, format="wav")
+            wav_buffer.seek(0)
+            
+            recognizer = sr.Recognizer()
+            with sr.AudioFile(wav_buffer) as source:
+                audio_data = recognizer.record(source)
+                detected_text = recognizer.recognize_google(audio_data)
+                processed_prompt = detected_text
+                
+            st.session_state.mic_rotation_counter += 1
+                
+        except sr.UnknownValueError:
+            st.error("Signal interference detected. Please repeat the command clearly.")
+            st.session_state.mic_rotation_counter += 1
+        except Exception as e:
+            st.error(f"Core communication breakdown: {str(e)}.")
+            st.session_state.mic_rotation_counter += 1
+
+elif user_text_input:
+    processed_prompt = user_text_input
+
+# 6. Pipeline Phase 2: Agentic Routing and Data Aggregation
+if processed_prompt:
+    st.session_state.messages.append({"role": "user", "content": processed_prompt})
+    
+    with st.spinner("J.A.R.V.I.S. is compiling data streams..."):
+        intent = classify_intent(processed_prompt)
+        
+        trend_data = fetch_gold_trend_analysis(selected_ticker, period=selected_timeframe)
+        price_data = fetch_live_stock_price(selected_ticker)
+        
+        if intent == "LIVE":
+            if price_data["status"] == "success":
+                jarvis_response = (
+                    f"Live data retrieved, sir. {price_data['company']} is currently trading on the NSE at "
+                    f"Rs. {price_data['price']}. Trajectory metrics for the {trend_data.get('lookback_period')} horizon "
+                    f"indicate a structural {trend_data.get('momentum')} orientation."
+                )
+            else:
+                jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
+                
+        elif intent == "NEWS":
+            news_headlines = fetch_market_news(selected_ticker)
+            jarvis_response = generate_financial_forecast(processed_prompt, price_data, news_headlines, trend_data, ticker=selected_ticker)
+            
+        else:
+            jarvis_response = (
+                f"At your service, sir. The system's diagnostic analytics are currently targeted at the {selected_ticker} vector "
+                f"across a {selected_timeframe} horizon. Specify if you would like me to extract live price telemetry or formulate a macro prediction."
+            )
+            
+    st.session_state.messages.append({"role": "assistant", "content": jarvis_response})
+    st.session_state.audio_played = False  # Reset flag so that the newly appended response triggers TTS playback
+    st.rerun()

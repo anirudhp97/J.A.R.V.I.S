@@ -1,0 +1,9 @@
+streamlit>=1.35.0
+nsepython==2.97
+yfinance>=0.2.40
+pandas>=2.0.0
+requests>=2.31.0
+SpeechRecognition==3.10.0
+openai
+gTTS
+pydub
