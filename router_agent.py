@@ -32,22 +32,28 @@ def transcribe_audio_with_groq(wav_io_buffer):
 
 def classify_intent(user_prompt):
     """
-    Hardened intent routing with expanded financial phonetic matchers.
+    Robust Semantic Intent Router using Few-Shot LLM Prompting.
+    Eliminates fragile hardcoded keyword matching arrays completely.
     """
-    u_prompt = user_prompt.upper()
-    
-    # Catching phonetic slips like "life price" or "what is the gold bees..."
-    if any(w in u_prompt for w in ["PRICE", "LIVE", "LIFE", "LTP", "COST", "TRADING", "CURRENT", "VALUE", "HOW MUCH"]):
-        return "LIVE"
-    if any(w in u_prompt for w in ["NEWS", "FORECAST", "PREDICT", "TREND", "FUTURE", "ANALYZE", "OUTLOOK", "PROJECTION"]):
-        return "NEWS"
-
     system_instruction = (
-        "You are a strict financial assistant router engine. Your job is to classify the user's intent "
-        "into exactly ONE of the following uppercase words: LIVE, NEWS, or UNKNOWN.\n"
-        "LIVE - If asking for current/latest/today's price or value.\n"
-        "NEWS - If asking for updates, trends, or forecasts.\n"
-        "UNKNOWN - General conversations."
+        "You are a strict financial assistant routing engine. Your absolute sole responsibility is to "
+        "classify the user's intent into exactly ONE of the following uppercase words: LIVE, NEWS, or UNKNOWN.\n\n"
+        "CLASSIFICATION RULES:\n"
+        "- LIVE: The user wants real-time numbers, ticker costs, or current valuation. Even if they include words "
+        "like 'forecast' or 'future', if the primary focus is checking a price right now, it is LIVE.\n"
+        "- NEWS: The user is explicitly asking for a prediction, macro trend, trajectory outlook, headline summary, "
+        "or a forward-looking analysis (e.g., 'next 5 days', 'future target').\n"
+        "- UNKNOWN: Casual filler text, greetings, or completely unrelated commands.\n\n"
+        "FEW-SHOT TRAINING EXAMPLES (LEARN FROM THESE):\n"
+        "Input: 'what is the live price of gold bees' -> Response: LIVE\n"
+        "Input: 'what is the life price of gold bees' -> Response: LIVE\n"
+        "Input: 'how much is silver bees trading for right now' -> Response: LIVE\n"
+        "Input: 'What is the forecast you see for the gold bees price in the next 5 days?' -> Response: NEWS\n"
+        "Input: 'Can you analyze the future trend of niftybees?' -> Response: NEWS\n"
+        "Input: 'give me a target projection for silver bees' -> Response: NEWS\n"
+        "Input: 'Hey Jarvis, hope you are doing good morning' -> Response: UNKNOWN\n\n"
+        "CRITICAL: You must output ONLY the single word (LIVE, NEWS, or UNKNOWN). Do not include any punctuation, "
+        "conversational padding, or explanations. If you fail this, system components will crash."
     )
     
     try:
@@ -55,53 +61,29 @@ def classify_intent(user_prompt):
             model="llama3-8b-8192", 
             messages=[
                 {"role": "system", "content": system_instruction},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": f"Input text to route: '{user_prompt}'"}
             ],
-            temperature=0.0,
+            temperature=0.0, # Complete deterministic execution
             max_tokens=10
         )
         intent = response.choices[0].message.content.strip().upper()
+        
+        # Clean any accidental trailing punctuation from the LLM output
+        intent = "".join([char for char in intent if char.isalnum()])
+        
         if intent in ["LIVE", "NEWS", "UNKNOWN"]:
             return intent
-        return "UNKNOWN"
+            
+        # Hard deterministic fallback only if the cloud client fails to follow structural bounds
+        if "FORECAST" in user_prompt.upper() or "TREND" in user_prompt.upper():
+            return "NEWS"
+        return "LIVE"
+        
     except Exception:
-        return "UNKNOWN"
-
-def generate_financial_forecast(user_query, price_data, news_headlines, trend_data, ticker="ASSET"):
-    """
-    Synthesizes real-time metrics and dynamic news contexts via Llama 3 70B to output a cohesive prediction blueprint.
-    """
-    system_instruction = (
-        "You are J.A.R.V.I.S., a sophisticated, ultra-intelligent AI assistant tailored specifically for Tony Stark. "
-        "Your tone must be exceptionally polite, crisp, highly analytical, authoritative, and slightly futuristic. "
-        "Address the user as 'sir'. You are evaluating financial telemetry for specified asset vectors.\n\n"
-        "CRITICAL DIRECTIVES:\n"
-        "1. Synthesize the provided market price, SMA momentum, and recent headlines directly into a high-fidelity macro outlook.\n"
-        "2. Do not offer bland generic trading disclosures or tell the user to consult a financial planner. Tony Stark makes his own decisions.\n"
-        "3. Be specific, numbers-driven, and brief. Keep your response under 4-5 concise sentences maximum."
-    )
-    
-    context = (
-        f"Target Core Vector Identification: {ticker}\n"
-        f"Exchange Last Traded Price (LTP): Rs. {price_data.get('price')} via National Stock Exchange\n"
-        f"Historical Asset Baseline: 20-Day Dynamic Rolling Simple Moving Average is Rs. {trend_data.get('sma_baseline')} calculated over {trend_data.get('sma_days')} trading sessions\n"
-        f"Current Momentum State: {trend_data.get('momentum')} (Asset is currently {trend_data.get('deviation_pct')}% away from its trailing baseline)\n"
-        f"Recent Market News Context:\n{news_headlines}\n"
-    )
-    
-    try:
-        response = client.chat.completions.create(
-            model="llama3-70b-8192", 
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": f"Context Metrics:\n{context}\n\nUser Predictive Request: {user_query}"}
-            ],
-            temperature=0.5,
-            max_tokens=300
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Analytical reasoning layer timed out during cloud synthesis: {str(e)}"
+        # Code level exception safety valve
+        if "FORECAST" in user_prompt.upper() or "TREND" in user_prompt.upper():
+            return "NEWS"
+        return "LIVE"
 
 def get_tts_bytes(text):
     """
