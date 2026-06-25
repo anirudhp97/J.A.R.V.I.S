@@ -8,3 +8,4 @@ openai
 gTTS
 pydub
 audiofile
+edge-tts

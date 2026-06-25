@@ -1,7 +1,8 @@
 import os
 import io
+import asyncio
+import edge_tts
 from openai import OpenAI
-from gtts import gTTS
 
 # Initialize the cloud client using environment variables/Streamlit secrets
 API_KEY = os.getenv("GROQ_API_KEY") 
@@ -32,62 +33,60 @@ def transcribe_audio_with_groq(wav_io_buffer):
 
 def classify_intent(user_prompt):
     """
-    Robust Semantic Intent Router using Few-Shot LLM Prompting.
-    Eliminates fragile hardcoded keyword matching arrays completely.
+    Two-Step Verification Intent Router.
+    Combines absolute structural intercept overrides with semantic LLM intelligence.
     """
+    u_prompt = user_prompt.upper()
+    
+    # =========================================================================
+    # STEP 1: STRICT OVERRIDE INTERCEPT (Catches hybrid phrases perfectly)
+    # =========================================================================
+    if any(token in u_prompt for token in ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION"]):
+        return "NEWS"
+        
+    # =========================================================================
+    # STEP 2: SEMANTIC FEW-SHOT LLM LAYER (Using active llama-3.1-8b-instant)
+    # =========================================================================
     system_instruction = (
         "You are a strict financial assistant routing engine. Your absolute sole responsibility is to "
         "classify the user's intent into exactly ONE of the following uppercase words: LIVE, NEWS, or UNKNOWN.\n\n"
         "CLASSIFICATION RULES:\n"
-        "- LIVE: The user wants real-time numbers, ticker costs, or current valuation. Even if they include words "
-        "like 'forecast' or 'future', if the primary focus is checking a price right now, it is LIVE.\n"
-        "- NEWS: The user is explicitly asking for a prediction, macro trend, trajectory outlook, headline summary, "
-        "or a forward-looking analysis (e.g., 'next 5 days', 'future target').\n"
+        "- LIVE: The user wants real-time numbers, ticker costs, or current valuation.\n"
+        "- NEWS: The user is asking for general market headlines or an update summary.\n"
         "- UNKNOWN: Casual filler text, greetings, or completely unrelated commands.\n\n"
-        "FEW-SHOT TRAINING EXAMPLES (LEARN FROM THESE):\n"
+        "FEW-SHOT TRAINING EXAMPLES:\n"
         "Input: 'what is the live price of gold bees' -> Response: LIVE\n"
         "Input: 'what is the life price of gold bees' -> Response: LIVE\n"
         "Input: 'how much is silver bees trading for right now' -> Response: LIVE\n"
-        "Input: 'What is the forecast you see for the gold bees price in the next 5 days?' -> Response: NEWS\n"
-        "Input: 'Can you analyze the future trend of niftybees?' -> Response: NEWS\n"
-        "Input: 'give me a target projection for silver bees' -> Response: NEWS\n"
         "Input: 'Hey Jarvis, hope you are doing good morning' -> Response: UNKNOWN\n\n"
-        "CRITICAL: You must output ONLY the single word (LIVE, NEWS, or UNKNOWN). Do not include any punctuation, "
-        "conversational padding, or explanations. If you fail this, system components will crash."
+        "CRITICAL: You must output ONLY the single word (LIVE, NEWS, or UNKNOWN). Do not include any punctuation or explanations."
     )
     
     try:
         response = client.chat.completions.create(
-            model="llama3-8b-8192", 
+            model="llama-3.1-8b-instant",  # Updated to active, non-decommissioned endpoint
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": f"Input text to route: '{user_prompt}'"}
             ],
-            temperature=0.0, # Complete deterministic execution
+            temperature=0.0,
             max_tokens=10
         )
         intent = response.choices[0].message.content.strip().upper()
         
-        # Clean any accidental trailing punctuation from the LLM output
+        # Strip trailing non-alphanumeric punctuation marks if generated
         intent = "".join([char for char in intent if char.isalnum()])
         
         if intent in ["LIVE", "NEWS", "UNKNOWN"]:
             return intent
-            
-        # Hard deterministic fallback only if the cloud client fails to follow structural bounds
-        if "FORECAST" in user_prompt.upper() or "TREND" in user_prompt.upper():
-            return "NEWS"
         return "LIVE"
         
     except Exception:
-        # Code level exception safety valve
-        if "FORECAST" in user_prompt.upper() or "TREND" in user_prompt.upper():
-            return "NEWS"
         return "LIVE"
 
 def generate_financial_forecast(user_query, price_data, news_headlines, trend_data, ticker="ASSET"):
     """
-    Synthesizes real-time metrics and dynamic news contexts via Llama 3 70B to output a cohesive prediction blueprint.
+    Synthesizes real-time metrics and dynamic news contexts via Llama 3.3 70B to output a cohesive prediction blueprint.
     """
     system_instruction = (
         "You are J.A.R.V.I.S., a sophisticated, ultra-intelligent AI assistant tailored specifically for Tony Stark. "
@@ -123,14 +122,23 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
 
 def get_tts_bytes(text):
     """
-    Cloud-safe, 100% free Text-To-Speech using Google TTS with an elegant British voice profile.
+    Asynchronous Microsoft Edge TTS bridge running synchronously.
+    Delivers a crisp, premium British Male voice (Ryan Neural) for J.A.R.V.I.S.
     """
+    voice_profile = "en-GB-RyanNeural"  # J.A.R.V.I.S. Male Profile
+    
+    async def generate_audio():
+        communicate = edge_tts.Communicate(text, voice_profile)
+        audio_data = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data += chunk["data"]
+        return audio_data
+
     try:
-        tts = gTTS(text=text, lang='en', tld='co.uk', slow=False)
-        fp = io.BytesIO()
-        tts.write_to_fp(fp)
-        fp.seek(0)
-        return fp.read()
+        # Await and resolve the coroutine safely into bytes before returning
+        audio_bytes = asyncio.run(generate_audio())
+        return io.BytesIO(audio_bytes).getvalue()  # Returns raw bytes for the Streamlit framework
     except Exception as e:
         print(f"TTS Framework Error: {str(e)}")
         return None
