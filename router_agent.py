@@ -109,7 +109,7 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
     
     try:
         response = client.chat.completions.create(
-            model="llama3-70b-8192", 
+            model="llama-3.3-70b-versatile", 
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": f"Context Metrics:\n{context}\n\nUser Predictive Request: {user_query}"}
