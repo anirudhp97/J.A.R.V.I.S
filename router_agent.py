@@ -85,6 +85,42 @@ def classify_intent(user_prompt):
             return "NEWS"
         return "LIVE"
 
+def generate_financial_forecast(user_query, price_data, news_headlines, trend_data, ticker="ASSET"):
+    """
+    Synthesizes real-time metrics and dynamic news contexts via Llama 3 70B to output a cohesive prediction blueprint.
+    """
+    system_instruction = (
+        "You are J.A.R.V.I.S., a sophisticated, ultra-intelligent AI assistant tailored specifically for Tony Stark. "
+        "Your tone must be exceptionally polite, crisp, highly analytical, authoritative, and slightly futuristic. "
+        "Address the user as 'sir'. You are evaluating financial telemetry for specified asset vectors.\n\n"
+        "CRITICAL DIRECTIVES:\n"
+        "1. Synthesize the provided market price, SMA momentum, and recent headlines directly into a high-fidelity macro outlook.\n"
+        "2. Do not offer bland generic trading disclosures or tell the user to consult a financial planner. Tony Stark makes his own decisions.\n"
+        "3. Be specific, numbers-driven, and brief. Keep your response under 4-5 concise sentences maximum."
+    )
+    
+    context = (
+        f"Target Core Vector Identification: {ticker}\n"
+        f"Exchange Last Traded Price (LTP): Rs. {price_data.get('price')} via National Stock Exchange\n"
+        f"Historical Asset Baseline: 20-Day Dynamic Rolling Simple Moving Average is Rs. {trend_data.get('sma_baseline')} calculated over {trend_data.get('sma_days')} trading sessions\n"
+        f"Current Momentum State: {trend_data.get('momentum')} (Asset is currently {trend_data.get('deviation_pct')}% away from its trailing baseline)\n"
+        f"Recent Market News Context:\n{news_headlines}\n"
+    )
+    
+    try:
+        response = client.chat.completions.create(
+            model="llama3-70b-8192", 
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": f"Context Metrics:\n{context}\n\nUser Predictive Request: {user_query}"}
+            ],
+            temperature=0.5,
+            max_tokens=300
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Analytical reasoning layer timed out during cloud synthesis: {str(e)}"
+
 def get_tts_bytes(text):
     """
     Cloud-safe, 100% free Text-To-Speech using Google TTS with an elegant British voice profile.
