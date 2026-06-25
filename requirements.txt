@@ -7,3 +7,4 @@ SpeechRecognition==3.10.0
 openai
 gTTS
 pydub
+audiofile

@@ -1,16 +1,14 @@
 import streamlit as st
 import io
-import speech_recognition as sr
 from pydub import AudioSegment
 from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis
-from router_agent import classify_intent, generate_financial_forecast, get_tts_bytes
+from router_agent import classify_intent, generate_financial_forecast, get_tts_bytes, transcribe_audio_with_groq
 
 # 1. Page Config and Advanced Mark 42 Armor Hybrid Custom CSS Style Block
 st.set_page_config(page_title="J.A.R.V.I.S. CORE HUD", page_icon="🦾", layout="centered")
 
 st.markdown("""
     <style>
-        /* Keyframe animation for the pulsing Arc Reactor core */
         @keyframes reactorPulse {
             0% {
                 background-image: 
@@ -29,7 +27,6 @@ st.markdown("""
             }
         }
 
-        /* Deep space cyber background with integrated animated Arc Reactor */
         .stApp {
             background-color: #0b0202;
             color: #F7F1E3;
@@ -38,7 +35,6 @@ st.markdown("""
             background-attachment: fixed;
         }
         
-        /* Stark Industries Glow Header */
         h1 {
             color: #00E5FF !important;
             text-shadow: 0 0 10px #00E5FF, 0 0 20px #aa0505;
@@ -47,14 +43,12 @@ st.markdown("""
             text-align: center;
         }
         
-        /* Sidebar Styling: Mark 42 Crimson Armor Plating with Gold Borders */
         [data-testid="stSidebar"] {
             background-color: #1a0505 !important;
             border-right: 3px solid #b97d10 !important;
             box-shadow: 5px 0px 15px rgba(185, 125, 16, 0.2);
         }
         
-        /* Chat Bubble Custom Formatting overrides */
         .stChatMessage {
             border-radius: 6px !important;
             padding: 15px !important;
@@ -83,10 +77,9 @@ st.markdown("""
 st.title("J.A.R.V.I.S.")
 st.caption("System operational. All modules online. Awaiting directives, sir.")
 
-# Analytics Control Console on Sidebar (Champagne Gold Accents)
+# Analytics Control Console on Sidebar
 st.sidebar.markdown("<h3 style='color:#b97d10; text-shadow: 0 0 5px #b97d10;'>🛡️ ARMOR DIAGNOSTICS</h3>", unsafe_allow_html=True)
 
-# Multi-Asset Tracker Selector Matrix
 selected_ticker = st.sidebar.selectbox(
     "Select Target Core Vector:",
     options=["GOLDBEES", "SILVERBEES", "NIFTYBEES"],
@@ -141,13 +134,14 @@ for index, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> <span style='color:#E2F1FF;'>{message['content']}</span>", unsafe_allow_html=True)
         
-        # Only autoplay audio if it's the latest assistant message AND it hasn't been played yet
         if message["role"] == "assistant" and (index == len(st.session_state.messages) - 1) and not st.session_state.audio_played:
             with st.spinner("Initializing vocal transmission channels..."):
                 audio_bytes = get_tts_bytes(message["content"])
                 if audio_bytes:
                     st.audio(audio_bytes, format="audio/wav", autoplay=True)
-                    st.session_state.audio_played = True  # Lock it so re-runs don't replay it
+                    st.session_state.audio_played = True
+
+st.divider()
 
 # 4. Input Controls
 if "mic_rotation_counter" not in st.session_state:
@@ -159,29 +153,28 @@ user_text_input = st.chat_input("Input terminal override command here...")
 
 processed_prompt = None
 
-# 5. Pipeline Phase 1: Input Audio Capture & Transcoded Cloud STT Processing
+# 5. Pipeline Phase 1: Input Audio Capture & Transcoded Groq Whisper STT Processing
 if audio_file:
-    with st.spinner("Decoding vocal sequence arrays..."):
+    with st.spinner("Decoding vocal sequence arrays via Groq Whisper..."):
         try:
             audio_bytes_raw = audio_file.read()
             
-            # Use pydub to safely transcode whatever compression format the browser spits out into a uniform WAV
+            # Use pydub to safely transcode incoming multi-format browser audio streams to uncompressed standard WAV
             audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes_raw))
             wav_buffer = io.BytesIO()
             audio_segment.export(wav_buffer, format="wav")
             wav_buffer.seek(0)
             
-            recognizer = sr.Recognizer()
-            with sr.AudioFile(wav_buffer) as source:
-                audio_data = recognizer.record(source)
-                detected_text = recognizer.recognize_google(audio_data)
+            # Fire the uncompressed WAV directly up to Groq's cloud-accelerated hardware
+            detected_text = transcribe_audio_with_groq(wav_buffer)
+            
+            if detected_text:
                 processed_prompt = detected_text
+            else:
+                st.error("Could not compile audio transmission stream.")
                 
             st.session_state.mic_rotation_counter += 1
                 
-        except sr.UnknownValueError:
-            st.error("Signal interference detected. Please repeat the command clearly.")
-            st.session_state.mic_rotation_counter += 1
         except Exception as e:
             st.error(f"Core communication breakdown: {str(e)}.")
             st.session_state.mic_rotation_counter += 1
@@ -191,13 +184,27 @@ elif user_text_input:
 
 # 6. Pipeline Phase 2: Agentic Routing and Data Aggregation
 if processed_prompt:
+    clean_prompt = processed_prompt.upper()
+    
+    # Dynamically update the session state variable for the ticker tracker
+    if any(w in clean_prompt for w in ["GOLD BEES", "GOLD BEAST", "GOLD BEADS", "GOLDBEES", "LIFE PRICE OF GOLD"]):
+        st.session_state.active_ticker = "GOLDBEES"
+    elif any(w in clean_prompt for w in ["SILVER BEES", "SILVER BEAST", "SILVER BEADS", "SILVERBEES"]):
+        st.session_state.active_ticker = "SILVERBEES"
+    elif any(w in clean_prompt for w in ["NIFTY BEES", "NIFTYBEES"]):
+        st.session_state.active_ticker = "NIFTYBEES"
+
+    # Capture the updated ticker state instantly for data fetching before rerun
+    target_ticker = st.session_state.active_ticker
+
     st.session_state.messages.append({"role": "user", "content": processed_prompt})
     
     with st.spinner("J.A.R.V.I.S. is compiling data streams..."):
         intent = classify_intent(processed_prompt)
         
-        trend_data = fetch_gold_trend_analysis(selected_ticker, period=selected_timeframe)
-        price_data = fetch_live_stock_price(selected_ticker)
+        # Use target_ticker variable explicitly
+        trend_data = fetch_gold_trend_analysis(target_ticker, period=selected_timeframe)
+        price_data = fetch_live_stock_price(target_ticker)
         
         if intent == "LIVE":
             if price_data["status"] == "success":
@@ -210,15 +217,15 @@ if processed_prompt:
                 jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
                 
         elif intent == "NEWS":
-            news_headlines = fetch_market_news(selected_ticker)
-            jarvis_response = generate_financial_forecast(processed_prompt, price_data, news_headlines, trend_data, ticker=selected_ticker)
+            news_headlines = fetch_market_news(target_ticker)
+            jarvis_response = generate_financial_forecast(processed_prompt, price_data, news_headlines, trend_data, ticker=target_ticker)
             
         else:
             jarvis_response = (
-                f"At your service, sir. The system's diagnostic analytics are currently targeted at the {selected_ticker} vector "
+                f"At your service, sir. The system's diagnostic analytics are currently targeted at the {target_ticker} vector "
                 f"across a {selected_timeframe} horizon. Specify if you would like me to extract live price telemetry or formulate a macro prediction."
             )
             
     st.session_state.messages.append({"role": "assistant", "content": jarvis_response})
-    st.session_state.audio_played = False  # Reset flag so that the newly appended response triggers TTS playback
+    st.session_state.audio_played = False  
     st.rerun()

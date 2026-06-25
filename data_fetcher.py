@@ -35,50 +35,47 @@ def fetch_live_stock_price(ticker):
         try:
             yf_symbol = f"{ticker}.NS"
             yf_ticker = yf.Ticker(yf_symbol)
-            live_data = yf_ticker.history(period="1d")
-            if not live_data.empty:
-                return {
-                    "status": "success",
-                    "ticker": ticker,
-                    "company": asset_labels.get(ticker.upper(), ticker),
-                    "price": round(live_data['Close'].iloc[-1], 2)
-                }
-        except:
-            pass
-        return {"status": "error", "message": f"Market Ingestion failed: {str(e)}"}
+            live_price = yf_ticker.fast_info.last_price
+            
+            return {
+                "status": "success",
+                "ticker": ticker,
+                "company": asset_labels.get(ticker.upper(), ticker),
+                "price": round(live_price, 2)
+            }
+        except Exception as inner_error:
+            return {"status": "error", "message": f"All connection endpoints failed. Primary: {str(e)}. Fallback: {str(inner_error)}"}
 
 def fetch_market_news(ticker):
     """
-    Queries Yahoo Finance media endpoints to parse and structure
-    recent news headlines related to the specific target asset.
+    Scrapes real-time market news summaries using Yahoo Finance vectors.
     """
     try:
         yf_symbol = f"{ticker}.NS"
-        tracker = yf.Ticker(yf_symbol)
-        news_payload = tracker.news
+        yf_ticker = yf.Ticker(yf_symbol)
+        news_list = yf_ticker.news
         
-        if not news_payload:
-            return f"No breaking market announcements tracked for {ticker} over the last 48 hours."
-        
-        formatted_headlines = ""
-        for index, article in enumerate(news_payload[:3], start=1):
-            title = article.get('title', 'Unknown Headline')
-            publisher = article.get('publisher', 'Financial Network')
-            formatted_headlines += f"Headline {index}: '{title}' published by {publisher}.\n"
+        if not news_list:
+            return f"No synchronized mainstream headlines available for {ticker} vector at this period."
             
-        return formatted_headlines
+        compiled_headlines = ""
+        for index, item in enumerate(news_list[:3]):
+            title = item.get('title')
+            publisher = item.get('publisher')
+            compiled_headlines += f"[{index+1}] \"{title}\" via {publisher}\n"
+            
+        return compiled_headlines
     except Exception as e:
-        return f"Failed to retrieve secondary news context: {str(e)}"
+        return f"News diagnostic link unresponsive: {str(e)}"
 
 def fetch_gold_trend_analysis(ticker, period="1mo"):
     """
-    Downloads historical data based on user-specified periods ('5d', '1mo', '3mo', '1y')
-    and evaluates price momentum for the specific selected asset vector.
+    Generates a trend momentum blueprint using rolling Simple Moving Averages.
     """
     try:
         yf_symbol = f"{ticker}.NS"
-        tracker = yf.Ticker(yf_symbol)
-        history = tracker.history(period=period)
+        yf_ticker = yf.Ticker(yf_symbol)
+        history = yf_ticker.history(period=period)
         
         if history.empty or len(history) < 2:
             return {"status": "error", "message": f"Insufficient data available for {ticker} period: {period}"}
@@ -112,4 +109,4 @@ def fetch_gold_trend_analysis(ticker, period="1mo"):
             "lookback_period": period
         }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": f"Trend processing failure: {str(e)}"}
