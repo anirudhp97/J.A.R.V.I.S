@@ -103,15 +103,7 @@ selected_timeframe = st.sidebar.selectbox(
     }[x]
 )
 
-st.sidebar.markdown(f"""
-<div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px;'>
-    <span style='color: #00E5FF; font-size: 11px; font-weight: bold; letter-spacing: 1px;'>HUD CHANNEL FEED</span><br>
-    <span style='color: #4AF2A1; font-size: 12px;'>● ACTIVE VECT: {selected_ticker}</span><br>
-    <span style='color: #FCE154; font-size: 10px;'>CORE STABILITY: LOCKED</span>
-</div>
-""", unsafe_allow_html=True)
-
-# 2. Session State Initialization for Chat History
+# 2. Session State Initialization for Chat History & Context Memory
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
@@ -121,6 +113,20 @@ if "messages" not in st.session_state:
     ]
 if "audio_played" not in st.session_state:
     st.session_state.audio_played = False
+if "active_ticker" not in st.session_state:
+    st.session_state.active_ticker = selected_ticker
+if "last_valid_prompt" not in st.session_state:
+    st.session_state.last_valid_prompt = None
+if "awaiting_followup" not in st.session_state:
+    st.session_state.awaiting_followup = False
+
+st.sidebar.markdown(f"""
+<div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px;'>
+    <span style='color: #00E5FF; font-size: 11px; font-weight: bold; letter-spacing: 1px;'>HUD CHANNEL FEED</span><br>
+    <span style='color: #4AF2A1; font-size: 12px;'>● ACTIVE VECT: {st.session_state.active_ticker}</span><br>
+    <span style='color: #FCE154; font-size: 10px;'>CORE STABILITY: LOCKED</span>
+</div>
+""", unsafe_allow_html=True)
 
 # 3. Render Historical Chat Log using custom character identity tags
 for index, message in enumerate(st.session_state.messages):
@@ -158,23 +164,17 @@ if audio_file:
     with st.spinner("Decoding vocal sequence arrays via Groq Whisper..."):
         try:
             audio_bytes_raw = audio_file.read()
-            
-            # Use pydub to safely transcode incoming multi-format browser audio streams to uncompressed standard WAV
             audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes_raw))
             wav_buffer = io.BytesIO()
             audio_segment.export(wav_buffer, format="wav")
             wav_buffer.seek(0)
             
-            # Fire the uncompressed WAV directly up to Groq's cloud-accelerated hardware
             detected_text = transcribe_audio_with_groq(wav_buffer)
-            
             if detected_text:
                 processed_prompt = detected_text
             else:
                 st.error("Could not compile audio transmission stream.")
-                
             st.session_state.mic_rotation_counter += 1
-                
         except Exception as e:
             st.error(f"Core communication breakdown: {str(e)}.")
             st.session_state.mic_rotation_counter += 1
@@ -182,31 +182,47 @@ if audio_file:
 elif user_text_input:
     processed_prompt = user_text_input
 
-# 6. Pipeline Phase 2: Agentic Routing and Data Aggregation
+# 6. Pipeline Phase 2: Agentic Routing and Context-Aware Data Aggregation
 if processed_prompt:
-    clean_prompt = processed_prompt.upper()
+    clean_prompt = processed_prompt.upper().strip()
     
-    # Dynamically update the session state variable for the ticker tracker
-    if any(w in clean_prompt for w in ["GOLD BEES", "GOLD BEAST", "GOLD BEADS", "GOLDBEES", "LIFE PRICE OF GOLD"]):
+    # Check if this is a follow-up confirmation (e.g., "YES", "YEAH", "PLEASE", "DO IT")
+    is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD"])
+    
+    # If we are waiting for a follow-up and the user says "yes", restore the last historical query
+    if st.session_state.awaiting_followup and is_confirmation and st.session_state.last_valid_prompt:
+        routing_prompt = st.session_state.last_valid_prompt
+    else:
+        routing_prompt = processed_prompt
+        # Keep track of this prompt if it looks like a genuine data tracking intent
+        if any(w in clean_prompt for w in ["GOLD", "SILVER", "NIFTY", "BEES"]):
+            st.session_state.last_valid_prompt = processed_prompt
+
+    clean_routing = routing_prompt.upper()
+
+    # Dynamically update ticker session state
+    if any(w in clean_routing for w in ["GOLD BEES", "GOLD BEAST", "GOLD BEADS", "GOLDBEES", "PRICE OF GOLD"]):
         st.session_state.active_ticker = "GOLDBEES"
-    elif any(w in clean_prompt for w in ["SILVER BEES", "SILVER BEAST", "SILVER BEADS", "SILVERBEES"]):
+    elif any(w in clean_routing for w in ["SILVER BEES", "SILVER BEAST", "SILVER BEADS", "SILVERBEES"]):
         st.session_state.active_ticker = "SILVERBEES"
-    elif any(w in clean_prompt for w in ["NIFTY BEES", "NIFTYBEES"]):
+    elif any(w in clean_routing for w in ["NIFTY BEES", "NIFTYBEES"]):
         st.session_state.active_ticker = "NIFTYBEES"
 
-    # Capture the updated ticker state instantly for data fetching before rerun
     target_ticker = st.session_state.active_ticker
-
     st.session_state.messages.append({"role": "user", "content": processed_prompt})
     
     with st.spinner("J.A.R.V.I.S. is compiling data streams..."):
-        intent = classify_intent(processed_prompt)
+        # If the user confirmed, force an analytical 'NEWS' routing context, otherwise classify standard
+        if st.session_state.awaiting_followup and is_confirmation:
+            intent = "NEWS"
+        else:
+            intent = classify_intent(routing_prompt)
         
-        # Use target_ticker variable explicitly
         trend_data = fetch_gold_trend_analysis(target_ticker, period=selected_timeframe)
         price_data = fetch_live_stock_price(target_ticker)
         
         if intent == "LIVE":
+            st.session_state.awaiting_followup = False
             if price_data["status"] == "success":
                 jarvis_response = (
                     f"Live data retrieved, sir. {price_data['company']} is currently trading on the NSE at "
@@ -217,10 +233,13 @@ if processed_prompt:
                 jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
                 
         elif intent == "NEWS":
+            st.session_state.awaiting_followup = False
             news_headlines = fetch_market_news(target_ticker)
-            jarvis_response = generate_financial_forecast(processed_prompt, price_data, news_headlines, trend_data, ticker=target_ticker)
+            jarvis_response = generate_financial_forecast(routing_prompt, price_data, news_headlines, trend_data, ticker=target_ticker)
             
         else:
+            # System hits default fallback. We arm the follow-up state flags.
+            st.session_state.awaiting_followup = True
             jarvis_response = (
                 f"At your service, sir. The system's diagnostic analytics are currently targeted at the {target_ticker} vector "
                 f"across a {selected_timeframe} horizon. Specify if you would like me to extract live price telemetry or formulate a macro prediction."
