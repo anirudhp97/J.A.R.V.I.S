@@ -31,16 +31,10 @@ def classify_intent(user_prompt):
     """
     u_prompt = user_prompt.upper()
     
-    # =========================================================================
-    # STEP 1: STRICT OVERRIDE INTERCEPT (Expanded matching array)
-    # =========================================================================
     forecast_tokens = ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION", "CORE CARD", "VALUE OF"]
     if any(token in u_prompt for token in forecast_tokens):
         return "NEWS"
         
-    # =========================================================================
-    # STEP 2: SEMANTIC FEW-SHOT LLM LAYER
-    # =========================================================================
     system_instruction = (
         "You are a strict financial assistant routing engine. Your absolute sole responsibility is to "
         "classify the user's intent into exactly ONE of the following uppercase words: LIVE, NEWS, or UNKNOWN.\n\n"
@@ -76,22 +70,32 @@ def classify_intent(user_prompt):
     except Exception:
         return "UNKNOWN"
 
-def generate_financial_forecast(user_query, price_data, news_headlines, trend_data, ticker="ASSET"):
+def generate_financial_forecast(user_query, price_data, news_headlines, trend_data, tv_gauge, ticker="ASSET"):
     system_instruction = (
         "You are J.A.R.V.I.S., a sophisticated, ultra-intelligent AI assistant tailored specifically for Tony Stark. "
         "Your tone must be exceptionally polite, crisp, highly analytical, authoritative, and slightly futuristic. "
         "Address the user as 'sir'. You are evaluating financial telemetry for specified asset vectors.\n\n"
         "CRITICAL DIRECTIVES:\n"
-        "1. Synthesize the provided market price, SMA momentum, and recent headlines directly into a high-fidelity macro outlook.\n"
-        "2. Do not offer bland generic trading disclosures or tell the user to consult a financial planner. Tony Stark makes his own decisions.\n"
-        "3. Be specific, numbers-driven, and brief. Keep your response under 4-5 concise sentences maximum."
+        "1. Synthesize market prices, SMA momentum deviations, multi-indicator TradingView consensus data, and recent headlines directly into a high-fidelity macro outlook.\n"
+        "2. Balance structural news narratives against the hard mathematical oscillator summary from TradingView to eliminate directional blindspots.\n"
+        "3. Do not offer bland generic trading disclosures or tell the user to consult a financial planner. Tony Stark makes his own decisions.\n"
+        "4. Be specific, numbers-driven, and brief. Keep your response under 4-5 concise sentences maximum."
     )
     
+    if tv_gauge and tv_gauge.get("status") == "success":
+        tv_telemetry = (
+            f"TradingView Indicator Summary: {tv_gauge.get('recommendation')}\n"
+            f"Aggregate Oscillators & MAs Breakdown -> BUY: {tv_gauge.get('buy_signals')}, SELL: {tv_gauge.get('sell_signals')}, NEUTRAL: {tv_gauge.get('neutral_signals')}\n"
+        )
+    else:
+        tv_telemetry = "TradingView Indicator Summary: Data Connection Stream Unavailable.\n"
+
     context = (
         f"Target Core Vector Identification: {ticker}\n"
         f"Exchange Last Traded Price (LTP): Rs. {price_data.get('price')} via National Stock Exchange\n"
         f"Historical Asset Baseline: 20-Day Dynamic Rolling Simple Moving Average is Rs. {trend_data.get('sma_baseline')} calculated over {trend_data.get('sma_days')} trading sessions\n"
         f"Current Momentum State: {trend_data.get('momentum')} (Asset is currently {trend_data.get('deviation_pct')}% away from its trailing baseline)\n"
+        f"{tv_telemetry}"
         f"Recent Market News Context:\n{news_headlines}\n"
     )
     

@@ -1,6 +1,7 @@
 import yfinance as yf
 from nsepython import nse_eq, nse_quote_ltp
 import pandas as pd
+from tradingview_ta import TA_Handler, Interval
 
 def fetch_live_stock_price(ticker):
     """
@@ -110,3 +111,37 @@ def fetch_gold_trend_analysis(ticker, period="1mo"):
         }
     except Exception as e:
         return {"status": "error", "message": f"Trend processing failure: {str(e)}"}
+
+def fetch_tradingview_gauge(ticker, timeframe="1d"):
+    """
+    Fetches the precise consensus dashboard summary from TradingView's backend scanning arrays.
+    Supported timeframes parsed from streamlit layout: '5d' -> '1h', '1mo' -> '1d', '3mo' -> '1d', '1y' -> '1W'
+    """
+    tf_mapping = {
+        "5d": Interval.INTERVAL_1_HOUR,
+        "1mo": Interval.INTERVAL_1_DAY,
+        "3mo": Interval.INTERVAL_1_DAY,
+        "1y": Interval.INTERVAL_1_WEEK
+    }
+    selected_interval = tf_mapping.get(timeframe, Interval.INTERVAL_1_DAY)
+    
+    try:
+        handler = TA_Handler(
+            symbol=ticker.upper(),
+            exchange="NSE",
+            screener="india",
+            interval=selected_interval
+        )
+        analysis = handler.get_analysis()
+        return {
+            "status": "success",
+            "recommendation": analysis.summary.get("RECOMMENDATION", "NEUTRAL"),
+            "buy_signals": analysis.summary.get("BUY", 0),
+            "sell_signals": analysis.summary.get("SELL", 0),
+            "neutral_signals": analysis.summary.get("NEUTRAL", 0)
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to connect to TradingView core database: {str(e)}"
+        }

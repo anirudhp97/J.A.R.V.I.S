@@ -1,7 +1,7 @@
 import streamlit as st
 import io
 from pydub import AudioSegment
-from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis
+from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis, fetch_tradingview_gauge
 from router_agent import classify_intent, generate_financial_forecast, get_tts_bytes, transcribe_audio_with_groq
 
 # 1. Page Config and Advanced Mark 42 Armor Hybrid Custom CSS Style Block
@@ -235,7 +235,13 @@ if processed_prompt:
         elif intent == "NEWS":
             st.session_state.awaiting_followup = False
             news_headlines = fetch_market_news(target_ticker)
-            jarvis_response = generate_financial_forecast(routing_prompt, price_data, news_headlines, trend_data, ticker=target_ticker)
+            
+            # Extract TradingView technical gauge data context mapping the selected horizon
+            tv_gauge = fetch_tradingview_gauge(target_ticker, timeframe=selected_timeframe)
+            
+            jarvis_response = generate_financial_forecast(
+                routing_prompt, price_data, news_headlines, trend_data, tv_gauge, ticker=target_ticker
+            )
             
         else:
             # System hits default fallback. We arm the follow-up state flags.
