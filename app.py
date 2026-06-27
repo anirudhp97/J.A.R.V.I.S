@@ -5,7 +5,7 @@ from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_t
 from router_agent import classify_intent, generate_financial_forecast, get_tts_bytes, transcribe_audio_with_groq
 
 # 1. Page Config and Advanced Mark 42 Armor Hybrid Custom CSS Style Block
-st.set_page_config(page_title="J.A.R.V.I.S. CORE HUD", page_icon="🦾", layout="centered")
+st.set_page_config(page_title="J.A.R.V.I.S. CORE HUD", layout="centered")
 
 st.markdown("""
     <style>
