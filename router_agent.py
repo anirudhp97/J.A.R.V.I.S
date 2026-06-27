@@ -70,6 +70,39 @@ def classify_intent(user_prompt):
     except Exception:
         return "UNKNOWN"
 
+def generate_live_price_response(user_query, price_data, trend_data):
+    """
+    Low-latency presentation tier utilizing a smaller model to maximize speed
+    when delivering real-time exchange ticker variables.
+    """
+    system_instruction = (
+        "You are J.A.R.V.I.S., a high-performance AI assistant for Tony Stark. "
+        "Your tone must be crisp, polite, futuristic, and clear. Address the user as 'sir'. "
+        "Clearly provide the live exchange price details and its basic directional orientation. "
+        "Keep your output limited to 1 or 2 clear sentences maximum."
+    )
+    
+    context = (
+        f"Asset Vector Identifier: {price_data.get('ticker')}\n"
+        f"Target Enterprise: {price_data.get('company')}\n"
+        f"Live Exchange Value (LTP): Rs. {price_data.get('price')}\n"
+        f"Momentum Classification: {trend_data.get('momentum')}\n"
+    )
+    
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant", 
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": f"Context Metrics:\n{context}\n\nUser Voice Comm: {user_query}"}
+            ],
+            temperature=0.3,
+            max_tokens=80
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Live telemetry generation bypassed: {str(e)}"
+
 def generate_financial_forecast(user_query, price_data, news_headlines, trend_data, tv_gauge, ticker="ASSET"):
     system_instruction = (
         "You are J.A.R.V.I.S., a sophisticated, ultra-intelligent AI assistant tailored specifically for Tony Stark. "

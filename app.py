@@ -2,7 +2,7 @@ import streamlit as st
 import io
 from pydub import AudioSegment
 from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis, fetch_tradingview_gauge
-from router_agent import classify_intent, generate_financial_forecast, get_tts_bytes, transcribe_audio_with_groq
+from router_agent import classify_intent, generate_financial_forecast, generate_live_price_response, get_tts_bytes, transcribe_audio_with_groq
 
 # 1. Page Config and Advanced Mark 42 Armor Hybrid Custom CSS Style Block
 st.set_page_config(page_title="J.A.R.V.I.S. CORE HUD", layout="centered")
@@ -186,21 +186,17 @@ elif user_text_input:
 if processed_prompt:
     clean_prompt = processed_prompt.upper().strip()
     
-    # Check if this is a follow-up confirmation (e.g., "YES", "YEAH", "PLEASE", "DO IT")
     is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD"])
     
-    # If we are waiting for a follow-up and the user says "yes", restore the last historical query
     if st.session_state.awaiting_followup and is_confirmation and st.session_state.last_valid_prompt:
         routing_prompt = st.session_state.last_valid_prompt
     else:
         routing_prompt = processed_prompt
-        # Keep track of this prompt if it looks like a genuine data tracking intent
         if any(w in clean_prompt for w in ["GOLD", "SILVER", "NIFTY", "BEES"]):
             st.session_state.last_valid_prompt = processed_prompt
 
     clean_routing = routing_prompt.upper()
 
-    # Dynamically update ticker session state
     if any(w in clean_routing for w in ["GOLD BEES", "GOLD BEAST", "GOLD BEADS", "GOLDBEES", "PRICE OF GOLD"]):
         st.session_state.active_ticker = "GOLDBEES"
     elif any(w in clean_routing for w in ["SILVER BEES", "SILVER BEAST", "SILVER BEADS", "SILVERBEES"]):
@@ -212,7 +208,6 @@ if processed_prompt:
     st.session_state.messages.append({"role": "user", "content": processed_prompt})
     
     with st.spinner("J.A.R.V.I.S. is compiling data streams..."):
-        # If the user confirmed, force an analytical 'NEWS' routing context, otherwise classify standard
         if st.session_state.awaiting_followup and is_confirmation:
             intent = "NEWS"
         else:
@@ -224,10 +219,9 @@ if processed_prompt:
         if intent == "LIVE":
             st.session_state.awaiting_followup = False
             if price_data["status"] == "success":
-                jarvis_response = (
-                    f"Live data retrieved, sir. {price_data['company']} is currently trading on the NSE at "
-                    f"Rs. {price_data['price']}. Trajectory metrics for the {trend_data.get('lookback_period')} horizon "
-                    f"indicate a structural {trend_data.get('momentum')} orientation."
+                # Routed directly to our high-throughput 8B model function
+                jarvis_response = generate_live_price_response(
+                    routing_prompt, price_data, trend_data
                 )
             else:
                 jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
@@ -235,8 +229,6 @@ if processed_prompt:
         elif intent == "NEWS":
             st.session_state.awaiting_followup = False
             news_headlines = fetch_market_news(target_ticker)
-            
-            # Extract TradingView technical gauge data context mapping the selected horizon
             tv_gauge = fetch_tradingview_gauge(target_ticker, timeframe=selected_timeframe)
             
             jarvis_response = generate_financial_forecast(
@@ -244,7 +236,6 @@ if processed_prompt:
             )
             
         else:
-            # System hits default fallback. We arm the follow-up state flags.
             st.session_state.awaiting_followup = True
             jarvis_response = (
                 f"At your service, sir. The system's diagnostic analytics are currently targeted at the {target_ticker} vector "
