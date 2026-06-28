@@ -208,6 +208,7 @@ if processed_prompt:
     st.session_state.messages.append({"role": "user", "content": processed_prompt})
     
     with st.spinner("J.A.R.V.I.S. is compiling data streams..."):
+        # If we are waiting for confirmation and the user confirms, process it as a follow-up
         if st.session_state.awaiting_followup and is_confirmation:
             intent = "NEWS"
         else:
@@ -219,7 +220,6 @@ if processed_prompt:
         if intent == "LIVE":
             st.session_state.awaiting_followup = False
             if price_data["status"] == "success":
-                # Routed directly to our high-throughput 8B model function
                 jarvis_response = generate_live_price_response(
                     routing_prompt, price_data, trend_data
                 )
@@ -227,7 +227,9 @@ if processed_prompt:
                 jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
                 
         elif intent == "NEWS":
-            st.session_state.awaiting_followup = False
+            # CHANGE: Keep context tracking open so user can say "yes" to updates/refinements
+            st.session_state.awaiting_followup = True 
+            
             news_headlines = fetch_market_news(target_ticker)
             tv_gauge = fetch_tradingview_gauge(target_ticker, timeframe=selected_timeframe)
             
