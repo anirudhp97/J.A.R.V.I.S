@@ -29,7 +29,7 @@ st.title("J.A.R.V.I.S.")
 st.caption("System operational. All modules online. Awaiting directives, sir.")
 
 def render_tradingview_gauge_ui(ticker):
-    """ Renders a live, responsive visual Technical Analysis gauge in the UI. """
+    """ Renders a live, responsive visual Technical Analysis gauge in the UI via user's browser. """
     clean_ticker = str(ticker).upper().replace(" ", "")
     tv_html = f"""
     <div class="tradingview-widget-container" style="margin:auto; width:100%; max-width:450px;">
@@ -44,13 +44,34 @@ def render_tradingview_gauge_ui(ticker):
     """
     components.html(tv_html, height=380)
 
+# --- INITIALIZE CORE ACTIVE TICKER STATE BEFORE SELECTBOX ---
+if "active_ticker" not in st.session_state:
+    st.session_state.active_ticker = "GOLDBEES"
+
 # Sidebar System Controls
 st.sidebar.markdown("<h3 style='color:#b97d10; text-shadow: 0 0 5px #b97d10;'>🛡️ ARMOR DIAGNOSTICS</h3>", unsafe_allow_html=True)
 
+ticker_options = ["GOLDBEES", "SILVERBEES", "NIFTYBEES"]
+try:
+    current_ticker_index = ticker_options.index(st.session_state.active_ticker)
+except ValueError:
+    current_ticker_index = 0
+
 selected_ticker = st.sidebar.selectbox(
-    "Select Target Core Vector:", options=["GOLDBEES", "SILVERBEES", "NIFTYBEES"], index=0,
-    format_func=lambda x: {"GOLDBEES": "🥇 GOLD BeES Monitor", "SILVERBEES": "🥈 SILVER BeES Monitor", "NIFTYBEES": "📈 NIFTY BeES Index"}[x]
+    "Select Target Core Vector:", 
+    options=ticker_options, 
+    index=current_ticker_index,
+    format_func=lambda x: {
+        "GOLDBEES": "🥇 GOLD BeES Monitor", 
+        "SILVERBEES": "🥈 SILVER BeES Monitor", 
+        "NIFTYBEES": "📈 NIFTY BeES Index"
+    }[x]
 )
+
+# CRITICAL BUG FIX: Synchronize dropdown updates immediately to refresh browser iframe hooks
+if selected_ticker != st.session_state.active_ticker:
+    st.session_state.active_ticker = selected_ticker
+    st.rerun()
 
 selected_timeframe = st.sidebar.selectbox(
     "Select Trajectory Horizon:", options=["5d", "1mo", "3mo", "1y"], index=1,
@@ -62,8 +83,6 @@ if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
 if "audio_played" not in st.session_state:
     st.session_state.audio_played = False
-if "active_ticker" not in st.session_state:
-    st.session_state.active_ticker = selected_ticker
 if "last_valid_prompt" not in st.session_state:
     st.session_state.last_valid_prompt = None
 if "awaiting_graph_confirmation" not in st.session_state:
@@ -116,7 +135,7 @@ st.divider()
 if "mic_rotation_counter" not in st.session_state:
     st.session_state.mic_rotation_counter = 0
 
-widget_key = f"voice_recorder_v_{st.session_state.mic_rotation_counter}_{selected_ticker}"
+widget_key = f"voice_recorder_v_{st.session_state.mic_rotation_counter}_{st.session_state.active_ticker}"
 audio_file = st.audio_input("🎙️ ACTIVATE VOCAL RECEIVER", key=widget_key)
 user_text_input = st.chat_input("Input terminal override command here...")
 
