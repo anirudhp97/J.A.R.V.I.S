@@ -115,7 +115,6 @@ def fetch_gold_trend_analysis(ticker, period="1mo"):
 def fetch_tradingview_gauge(ticker, timeframe="1d"):
     """
     Fetches the precise consensus dashboard summary from TradingView's backend scanning arrays.
-    Supported timeframes parsed from streamlit layout: '5d' -> '1h', '1mo' -> '1d', '3mo' -> '1d', '1y' -> '1W'
     """
     tf_mapping = {
         "5d": Interval.INTERVAL_1_HOUR,
@@ -145,3 +144,23 @@ def fetch_tradingview_gauge(ticker, timeframe="1d"):
             "status": "error",
             "message": f"Failed to connect to TradingView core database: {str(e)}"
         }
+
+def fetch_historical_chart_data(ticker, period="1mo"):
+    """
+    Extracts raw time-series metrics from Yahoo Finance configured 
+    specifically for native web-browser rendering lines.
+    """
+    try:
+        yf_symbol = f"{ticker.upper()}.NS"
+        yf_ticker = yf.Ticker(yf_symbol)
+        history = yf_ticker.history(period=period)
+        
+        if history.empty:
+            return None
+            
+        chart_df = history[['Close']].copy()
+        chart_df.index = chart_df.index.strftime('%Y-%m-%d')
+        return chart_df
+    except Exception as e:
+        print(f"[JARVIS SYSTEM ALARM] Historical graph tracking failure: {str(e)}")
+        return None
