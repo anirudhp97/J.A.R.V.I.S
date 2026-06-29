@@ -111,7 +111,7 @@ st.markdown("""
             border-color: #b97d10 !important;
         }
 
-        /* 🛠️ TRADINGVIEW IFRAME LIGHT-THEME INJECTION LAYER */
+        /* TRADINGVIEW IFRAME LIGHT-THEME INJECTION LAYER */
         div[data-testid="stHtmlWrapper"] span, 
         div[data-testid="stHtmlWrapper"] p, 
         div[data-testid="stHtmlWrapper"] div,
@@ -154,10 +154,39 @@ selected_timeframe = st.sidebar.selectbox(
     }[x]
 )
 
+# --- LIVE TRADINGVIEW GAUGE SIDEBAR INJECTION ---
+try:
+    tv_data = fetch_tradingview_gauge(selected_ticker, timeframe=selected_timeframe)
+    if tv_data and tv_data.get("status") == "success":
+        rec = tv_data.get("recommendation", "NEUTRAL")
+        buy = tv_data.get("buy_signals", 0)
+        sell = tv_data.get("sell_signals", 0)
+        
+        # Micro color engine matching Stark aesthetics
+        if "BUY" in rec:
+            gauge_color = "#4AF2A1"
+        elif "SELL" in rec:
+            gauge_color = "#FF4B4B"
+        else:
+            gauge_color = "#FCE154"
+            
+        tv_html = f"""
+        <span style='color: #00E5FF; font-size: 11px; font-weight: bold;'>TRADINGVIEW GAUGES</span><br>
+        <span style='color: {gauge_color}; font-size: 13px; font-weight: bold;'>CONSENSUS: {rec}</span><br>
+        <span style='color: #F7F1E3; font-size: 10px;'>B: {buy} | S: {sell}</span><br>
+        """
+    else:
+        tv_html = "<span style='color: #FF4B4B; font-size: 10px;'>TV STREAM: OFFLINE</span><br>"
+except Exception:
+    tv_html = "<span style='color: #FF4B4B; font-size: 10px;'>TV STREAM: ERROR</span><br>"
+
 st.sidebar.markdown(f"""
 <div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px;'>
     <span style='color: #00E5FF; font-size: 11px; font-weight: bold; letter-spacing: 1px;'>HUD CHANNEL FEED</span><br>
     <span style='color: #4AF2A1; font-size: 12px;'>● ACTIVE VECT: {selected_ticker}</span><br>
+    <hr style='margin: 8px 0; border-color: rgba(185, 125, 16, 0.3) !important;'>
+    {tv_html}
+    <hr style='margin: 8px 0; border-color: rgba(185, 125, 16, 0.3) !important;'>
     <span style='color: #FCE154; font-size: 10px;'>CORE STABILITY: LOCKED</span>
 </div>
 """, unsafe_allow_html=True)
@@ -228,12 +257,11 @@ user_text_input = st.chat_input("Input terminal override command here...")
 
 processed_prompt = None
 
-# Pipeline Phase 1: Input Audio Capture & Groq Cloud STT Processing Injection
+# Pipeline Phase 1: Input Audio Capture & Groq Cloud STT Processing
 if audio_file:
     with st.spinner("Decoding vocal sequence arrays via Groq Matrix..."):
         try:
             audio_bytes_raw = audio_file.read()
-            # Wrap binary wav payload directly into structural BytesIO memory blocks for Whisper
             audio_buffer = io.BytesIO(audio_bytes_raw)
             detected_text = transcribe_audio_with_groq(audio_buffer)
             
@@ -273,7 +301,6 @@ if processed_prompt:
                 )
                 
                 news_headlines = fetch_market_news(selected_ticker)
-                # Correctly pulling down TradingView metrics for forecasting context
                 tv_gauge = fetch_tradingview_gauge(selected_ticker, timeframe=selected_timeframe)
                 
                 jarvis_response += generate_financial_forecast(
@@ -303,7 +330,6 @@ if processed_prompt:
                     
             elif intent == "NEWS":
                 news_headlines = fetch_market_news(selected_ticker)
-                # Correctly pulling down TradingView consensus gauge values
                 tv_gauge = fetch_tradingview_gauge(selected_ticker, timeframe=selected_timeframe)
                 
                 base_forecast = generate_financial_forecast(
