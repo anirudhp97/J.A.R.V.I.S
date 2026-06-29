@@ -97,7 +97,7 @@ def render_tradingview_gauge_ui(ticker):
         "showIntervalTabs": true,
         "displayMode": "single",
         "locale": "en",
-        "theme": "dark"
+        "theme": "light"
       }}
       </script>
     </div>
