@@ -349,4 +349,3 @@ if processed_prompt:
             
     st.session_state.messages.append({"role": "assistant", "content": jarvis_response})
     st.session_state.audio_played = False
-    st.rerun()
