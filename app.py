@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import io
 import re
-import pandas as pd  
+import pandas as pd  # Added missing pandas import
 from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis, fetch_tradingview_gauge
 from router_agent import classify_intent, generate_financial_forecast, generate_live_price_response, get_tts_bytes, transcribe_audio_with_groq
 
@@ -99,15 +99,13 @@ st.markdown("""
             border-top-color: #00e5ff !important;
         }
 
-        /* FORCE HUD TRANSPARENCY & TEXT OVERRIDES FOR EXTERNAL EMBEDDED HUD COMPONENTS */
+        /* ONLY ADDED BELOW TO TARGET TRADINGVIEW TEXT INSIDE IFRAMES WITHOUT CHANGING THE REST OF THE HUD */
         div[data-testid="stHtmlWrapper"] span, 
         div[data-testid="stHtmlWrapper"] p, 
         div[data-testid="stHtmlWrapper"] div,
         div[data-testid="stHtmlWrapper"] b {
             color: #ffffff !important;
         }
-
-        /* Fixes visibility of custom dropdown select cards inside foreign iframes */
         div[class*="dropdown"], select, option, button {
             color: #ffffff !important;
         }
@@ -152,9 +150,9 @@ with st.sidebar:
 st.markdown("### 🎙️ VOCAL COMM-LINK ANCHOR")
 audio_data_received = components.html("""
     <div style="display: flex; gap: 10px; align-items: center; justify-content: center; background: rgba(30,5,5,0.4); padding: 10px; border-radius: 6px; border: 1px dashed #ff3333;">
-        <button id="startRec" style="background: #cc0000; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold;">OPEN COMMS</button>
-        <button id="stopRec" style="background: #444; color: #aaa; border: none; padding: 8px 16px; border-radius: 4px; cursor: not-allowed; font-weight: bold;" disabled>CLOSE COMMS</button>
-        <div id="status" style="color: #00e5ff; font-family: monospace; font-size: 12px;">COMMS IDLE</div>
+        <button id=\"startRec\" style=\"background: #cc0000; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold;\">OPEN COMMS</button>
+        <button id=\"stopRec\" style=\"background: #444; color: #aaa; border: none; padding: 8px 16px; border-radius: 4px; cursor: not-allowed; font-weight: bold;\" disabled>CLOSE COMMS</button>
+        <div id=\"status\" style=\"color: #00e5ff; font-family: monospace; font-size: 12px;\">COMMS IDLE</div>
     </div>
 
     <script>
