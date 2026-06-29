@@ -31,10 +31,12 @@ st.caption("System operational. All modules online. Awaiting directives, sir.")
 def render_tradingview_gauge_ui(ticker):
     """ Renders a live, responsive visual Technical Analysis gauge in the UI. """
     clean_ticker = str(ticker).upper().replace(" ", "")
+    # FIXED: Appended explicit '?theme=dark' query param parameter directly to the script src url 
+    # to protect text elements from getting overwritten by internal layout components.
     tv_html = f"""
     <div class="tradingview-widget-container" style="margin:auto; width:100%; max-width:450px;">
       <div class="tradingview-widget-container__widget"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js?theme=dark" async>
       {{
         "interval": "1D", "width": "100%", "isTransparent": true, "height": 360,
         "symbol": "NSE:{clean_ticker}", "showIntervalTabs": true, "displayMode": "single", "locale": "en", "theme": "dark"
@@ -120,11 +122,11 @@ for index, message in enumerate(st.session_state.messages):
                         st.session_state.audio_played = True
                         
         elif message["type"] == "forecast_chart":
-            # The chart is now locked directly inside the message layout history chain
             st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 PROJECTED HORIZON DATASTREAM:</span>", unsafe_allow_html=True)
             forecast_data = generate_forecast_chart_data(message["ticker"], message["trend_data"], forecast_periods=5)
             if forecast_data is not None and not forecast_data.empty:
-                st.line_chart(forecast_data, y="Projected Target", color="#ffaa00")
+                # FIXED: Added explicit x and y assignment definitions to protect against structural None indexing bugs.
+                st.line_chart(forecast_data, x="Date", y="Projected Target", color="#ffaa00")
                 st.caption(f"Predictive tracking simulation captured historically for vector {message['ticker']}.")
             else:
                 st.error("Sir, target graphical datablock corrupted inside logs.")

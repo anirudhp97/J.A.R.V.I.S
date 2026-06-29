@@ -194,9 +194,8 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
             })
             
         projection_df = pd.DataFrame(projection_series)
-        projection_df.set_index("Date", inplace=True)
+        # Note: Do not set string dates as index so Streamlit's structural x-axis can capture it verbatim
         return projection_df
     except Exception as e:
-        # Variable injected into systemic telemetry alert log
         print(f"[JARVIS SYSTEM ALARM] Forecast modeling projection loop error for {ticker}: {str(e)}")
         return None
