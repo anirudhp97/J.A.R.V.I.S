@@ -155,8 +155,7 @@ def fetch_tradingview_gauge(ticker, timeframe="1d"):
 
 def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
     """
-    Computes a forward-looking mathematical trajectory projection matrix 
-    derived from rolling momentum coefficients and deviation baselines.
+    Fallback mathematical projection tool if no LLM data block exists.
     """
     try:
         if not trend_data or trend_data.get("status") == "error":
@@ -166,7 +165,6 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
         deviation_pct = trend_data.get("deviation_pct", 0)
         momentum_str = trend_data.get("momentum", "").upper()
         
-        # Calculate daily drift coefficient based on tracking matrix momentum
         drift_percentage = (deviation_pct / 100) / 10.0  
         if "BULLISH" in momentum_str:
             drift_direction = 1.0
@@ -180,12 +178,9 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
             
         projection_series = []
         current_simulated_price = latest_close
-        
-        # Generate future business day timestamps starting tomorrow
         future_dates = pd.date_range(start=pd.Timestamp.now() + pd.Timedelta(days=1), periods=forecast_periods, freq='B')
         
         for date in future_dates:
-            # Apply iterative momentum drift decay model
             step_change = current_simulated_price * drift_percentage * drift_direction
             current_simulated_price += step_change
             projection_series.append({
@@ -193,9 +188,7 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
                 "Projected Target": round(current_simulated_price, 2)
             })
             
-        projection_df = pd.DataFrame(projection_series)
-        # Note: Do not set string dates as index so Streamlit's structural x-axis can capture it verbatim
-        return projection_df
+        return pd.DataFrame(projection_series)
     except Exception as e:
-        print(f"[JARVIS SYSTEM ALARM] Forecast modeling projection loop error for {ticker}: {str(e)}")
+        print(f"Error inside fallback data engine: {str(e)}")
         return None

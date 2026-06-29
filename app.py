@@ -1,9 +1,62 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import io
+import re
+import pandas as pd
 from pydub import AudioSegment
 from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis, fetch_tradingview_gauge, generate_forecast_chart_data
 from router_agent import classify_intent, generate_financial_forecast, generate_live_price_response, get_tts_bytes, transcribe_audio_with_groq
+
+# ===================================================
+# 0. ADVANCED TEXTSTREAM PARSING MATRIX ENGINE
+# ===================================================
+def parse_llm_response_for_forecast(llm_text_response):
+    """
+    Scans J.A.R.V.I.S.'s verbal text string for a structured DATASTREAM block
+    and dynamically converts those exact numbers into a rendering DataFrame.
+    """
+    if "DATASTREAM_START" not in llm_text_response:
+        return None
+        
+    try:
+        pattern = r"DATASTREAM_START\n(.*?)\nDATASTREAM_END"
+        match = re.search(pattern, llm_text_response, re.DOTALL)
+        
+        if not match:
+            return None 
+            
+        raw_rows = match.group(1).strip().split('\n')
+        projection_series = []
+        
+        for row in raw_rows:
+            if "Projected Target" in row or "---" in row or "Date" in row or not row.strip():
+                continue
+                
+            if "|" in row:
+                parts = [p.strip() for p in row.split("|") if p.strip()]
+                if len(parts) >= 2:
+                    date_str = parts[0]
+                    val_str = parts[1]
+                    
+                    if date_str == "Date" or "---" in date_str:
+                        continue
+                    try:
+                        # Strip any stray currency signs or characters
+                        val_clean = re.sub(r'[^\d.]', '', val_str)
+                        projection_series.append({
+                            "Date": date_str,
+                            "Projected Target": float(val_clean)
+                        })
+                    except ValueError:
+                        continue
+                        
+        if len(projection_series) == 0:
+            return None
+            
+        return pd.DataFrame(projection_series)
+    except Exception as e:
+        print(f"[SYSTEM ALARM] Token tracking exception parsed: {str(e)}")
+        return None
 
 # 1. Page Config and Advanced Mark 42 Armor Hybrid Custom CSS Style Block
 st.set_page_config(page_title="J.A.R.V.I.S. CORE HUD", layout="centered")
@@ -29,24 +82,29 @@ st.title("J.A.R.V.I.S.")
 st.caption("System operational. All modules online. Awaiting directives, sir.")
 
 def render_tradingview_gauge_ui(ticker):
-    """ Renders a live, responsive visual Technical Analysis gauge in the UI. """
+    """ Renders a live visual Technical Analysis gauge with fixed high contrast dark styles. """
     clean_ticker = str(ticker).upper().replace(" ", "")
-    # FIXED: Appended explicit '?theme=dark' query param parameter directly to the script src url 
-    # to protect text elements from getting overwritten by internal layout components.
     tv_html = f"""
-    <div class="tradingview-widget-container" style="margin:auto; width:100%; max-width:450px;">
+    <div class="tradingview-widget-container" style="margin:auto; width:100%; max-width:450px; background-color: transparent;">
       <div class="tradingview-widget-container__widget"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js?theme=dark" async>
+      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
       {{
-        "interval": "1D", "width": "100%", "isTransparent": true, "height": 360,
-        "symbol": "NSE:{clean_ticker}", "showIntervalTabs": true, "displayMode": "single", "locale": "en", "theme": "dark"
+        "interval": "1D",
+        "width": "100%",
+        "isTransparent": true,
+        "height": 330,
+        "symbol": "NSE:{clean_ticker}",
+        "showIntervalTabs": true,
+        "displayMode": "single",
+        "locale": "en",
+        "theme": "dark"
       }}
       </script>
     </div>
     """
-    components.html(tv_html, height=380)
+    components.html(tv_html, height=350)
 
-# --- INITIALIZE CORE ACTIVE TICKER STATE BEFORE SELECTBOX ---
+# Initialize Active Ticker
 if "active_ticker" not in st.session_state:
     st.session_state.active_ticker = "GOLDBEES"
 
@@ -88,9 +146,10 @@ if "last_valid_prompt" not in st.session_state:
     st.session_state.last_valid_prompt = None
 if "awaiting_graph_confirmation" not in st.session_state:
     st.session_state.awaiting_graph_confirmation = False
-# Temporary staging cache to retain metrics between confirmation turns
 if "staged_trend_data" not in st.session_state:
     st.session_state.staged_trend_data = None
+if "staged_llm_text" not in st.session_state:
+    st.session_state.staged_llm_text = None
 
 st.sidebar.markdown(f"""
 <div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px; margin-bottom: 15px;'>
@@ -104,7 +163,7 @@ st.sidebar.markdown("<h3 style='color:#00E5FF; text-shadow: 0 0 5px #00E5FF;'>�
 with st.sidebar.expander(f"🔮 {st.session_state.active_ticker} Core Consensus", expanded=True):
     render_tradingview_gauge_ui(st.session_state.active_ticker)
 
-# --- DISPLAY CHAT FLOW ARCHITECTURE (WITH INLINE RENDERING) ---
+# Display Chat History Flow Architecture
 for index, message in enumerate(st.session_state.messages):
     prefix = "T. STARK [COM-LINK]:" if message["role"] == "user" else "J.A.R.V.I.S.:"
     text_color = "#FCC200" if message["role"] == "user" else "#00E5FF"
@@ -113,7 +172,6 @@ for index, message in enumerate(st.session_state.messages):
         if message["type"] == "text":
             st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> <span style='color:#E2F1FF;'>{message['content']}</span>", unsafe_allow_html=True)
             
-            # Autoplay last response vocalization track
             if message["role"] == "assistant" and (index == len(st.session_state.messages) - 1) and not st.session_state.audio_played:
                 with st.spinner("Initializing vocal transmission channels..."):
                     audio_bytes = get_tts_bytes(message["content"])
@@ -123,11 +181,15 @@ for index, message in enumerate(st.session_state.messages):
                         
         elif message["type"] == "forecast_chart":
             st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 PROJECTED HORIZON DATASTREAM:</span>", unsafe_allow_html=True)
-            forecast_data = generate_forecast_chart_data(message["ticker"], message["trend_data"], forecast_periods=5)
+            
+            # Look for extracted text inside history state block block first
+            forecast_data = parse_llm_response_for_forecast(message["llm_source_text"])
+            if forecast_data is None:
+                forecast_data = generate_forecast_chart_data(message["ticker"], message["trend_data"], forecast_periods=5)
+                
             if forecast_data is not None and not forecast_data.empty:
-                # FIXED: Added explicit x and y assignment definitions to protect against structural None indexing bugs.
-                st.line_chart(forecast_data, x="Date", y="Projected Target", color="#ffaa00")
-                st.caption(f"Predictive tracking simulation captured historically for vector {message['ticker']}.")
+                st.line_chart(data=forecast_data, x="Date", y="Projected Target", color="#ffaa00")
+                st.caption(f"Predictive tracking simulation captured from vector context data matrix for {message['ticker']}.")
             else:
                 st.error("Sir, target graphical datablock corrupted inside logs.")
 
@@ -160,7 +222,7 @@ if audio_file:
 elif user_text_input:
     processed_prompt = user_text_input
 
-# Main Pipeline Execution
+# Main Pipeline Execution Engine
 if processed_prompt:
     clean_prompt = processed_prompt.upper().strip()
     
@@ -169,16 +231,15 @@ if processed_prompt:
     
     st.session_state.messages.append({"role": "user", "type": "text", "content": processed_prompt})
     
-    # Logic Gate: Graph Confirmation State Flow
     if st.session_state.awaiting_graph_confirmation:
         st.session_state.awaiting_graph_confirmation = False
         if is_confirmation:
-            # Append chart directly behind the question turn in history logs
             st.session_state.messages.append({
                 "role": "assistant",
                 "type": "forecast_chart",
                 "ticker": st.session_state.active_ticker,
-                "trend_data": st.session_state.staged_trend_data
+                "trend_data": st.session_state.staged_trend_data,
+                "llm_source_text": st.session_state.staged_llm_text
             })
             jarvis_response = f"Understood, sir. Initializing rendering sequences. Visual forecast tracks for the {st.session_state.active_ticker} vector have been securely committed to the logs above."
         elif is_negation:
@@ -187,9 +248,9 @@ if processed_prompt:
             jarvis_response = "Telemetry projection reset, sir. State your objective: live price tracking or trend analysis modeling."
             
         st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
-        st.session_state.staged_trend_data = None # Wipe temporary cache turn
+        st.session_state.staged_trend_data = None
+        st.session_state.staged_llm_text = None
             
-    # Standard Context Processing Flow
     else:
         if any(w in clean_prompt for w in ["GOLD BEES", "GOLDBEES", "PRICE OF GOLD"]): st.session_state.active_ticker = "GOLDBEES"
         elif any(w in clean_prompt for w in ["SILVER BEES", "SILVERBEES"]): st.session_state.active_ticker = "SILVERBEES"
@@ -219,8 +280,8 @@ if processed_prompt:
                 
                 jarvis_response = base_forecast + f"\n\nShall I project the dynamic visual trend trajectory forecast chart for {target_ticker} across the upcoming trading sessions, sir?"
                 
-                # Cache parameters to regenerate later if user confirms yes
                 st.session_state.staged_trend_data = trend_data
+                st.session_state.staged_llm_text = base_forecast
                 st.session_state.awaiting_graph_confirmation = True
                 st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
                 
