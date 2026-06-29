@@ -198,14 +198,15 @@ for index, message in enumerate(st.session_state.messages):
                 forecast_data = generate_forecast_chart_data(message["ticker"], message["trend_data"], forecast_periods=5)
                 
             if forecast_data is not None and not forecast_data.empty:
-                # If it's the forecast_data from the function, it's already indexed by 'Date'.
-                # We just need to ensure the index is in datetime format.
-                if not isinstance(forecast_data.index, pd.DatetimeIndex):
-                    forecast_data.index = pd.to_datetime(forecast_data.index)
-                
-                # Render directly
-                st.line_chart(forecast_data, y="Projected Target", color="#ffaa00")
-                st.caption(f"Predictive tracking simulation captured from vector context data matrix for {message['ticker']}.")
+                # Instead of generic st.line_chart, let's use the explicit column mapping and ensure it's treated as a static visualization.
+                st.line_chart(
+                    forecast_data, 
+                    x="Date", 
+                    y="Projected Target", 
+                    color="#ffaa00",
+                    use_container_width=True
+                    )
+                st.caption(f"Predictive tracking simulation captured for {message['ticker']}.")
             else:
                 st.error("Sir, target graphical datablock corrupted inside logs.")
 

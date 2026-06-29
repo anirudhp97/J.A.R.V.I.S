@@ -187,10 +187,8 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
         for date in future_dates:
             step_change = current_simulated_price * drift_percentage * drift_direction
             current_simulated_price += step_change
-            projection_series.append({
-                "Date": date, # Keep as Timestamp object
-                "Projected Target": round(current_simulated_price, 2)
-            })
+            projection_series.append({"Date": date.strftime('%Y-%m-%d'),  # Force string format
+                                      "Projected Target": float(round(current_simulated_price, 2))})
             
         # 1. Create DataFrame
         projection_df = pd.DataFrame(projection_series)
