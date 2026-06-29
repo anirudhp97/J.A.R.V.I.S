@@ -1,7 +1,12 @@
 import yfinance as yf
 from nsepython import nse_eq, nse_quote_ltp
 import pandas as pd
-from tradingview_ta import TA_Handler, Interval
+
+try:
+    from tradingview_ta import TA_Handler, Interval
+except ImportError:
+    TA_Handler = None
+    Interval = None
 
 def fetch_live_stock_price(ticker):
     """
@@ -123,6 +128,12 @@ def fetch_tradingview_gauge(ticker, timeframe="1d"):
     """
     Fetches the precise consensus dashboard summary from TradingView's backend scanning arrays.
     """
+    if TA_Handler is None or Interval is None:
+        return {
+            "status": "error",
+            "message": "TradingView TA package is not installed."
+        }
+
     tf_mapping = {
         "5d": Interval.INTERVAL_1_HOUR,
         "1mo": Interval.INTERVAL_1_DAY,
@@ -158,46 +169,54 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
     Generates a momentum-based drift projection.
     Returns a DataFrame with a DatetimeIndex for perfect Streamlit rendering.
     """
-    # Note: 'ticker' can be used here for ticker-specific drift sensitivity 
-    # (e.g., higher volatility for NIFTYBEES vs GOLDBEES).
     try:
         if not trend_data or trend_data.get("status") == "error":
             return None
-            
+
         latest_close = trend_data.get("latest_close")
+        if latest_close is None or (isinstance(latest_close, float) and pd.isna(latest_close)):
+            return None
+
         deviation_pct = trend_data.get("deviation_pct", 0)
-        momentum_str = trend_data.get("momentum", "").upper()
-        
-        # Calculate drift
-        drift_percentage = (deviation_pct / 100) / 10.0  
+        if deviation_pct is None or (isinstance(deviation_pct, float) and pd.isna(deviation_pct)):
+            deviation_pct = 0
+
+        momentum_str = str(trend_data.get("momentum", "")).upper()
+
+        drift_percentage = (float(deviation_pct) / 100) / 10.0
         if "BULLISH" in momentum_str:
             drift_direction = 1.0
-            if drift_percentage <= 0: drift_percentage = 0.001
+            if drift_percentage <= 0:
+                drift_percentage = 0.001
         elif "BEARISH" in momentum_str:
             drift_direction = -1.0
-            if drift_percentage >= 0: drift_percentage = -0.001
+            if drift_percentage >= 0:
+                drift_percentage = -0.001
         else:
             drift_direction = 0.0
             drift_percentage = 0.0
-            
+
         projection_series = []
-        current_simulated_price = latest_close
+        current_simulated_price = float(latest_close)
         future_dates = pd.date_range(start=pd.Timestamp.now() + pd.Timedelta(days=1), periods=forecast_periods, freq='B')
-        
+
         for date in future_dates:
             step_change = current_simulated_price * drift_percentage * drift_direction
             current_simulated_price += step_change
-            projection_series.append({"Date": date.strftime('%Y-%m-%d'),  # Force string format
-                                      "Projected Target": float(round(current_simulated_price, 2))})
-            
-        # 1. Create DataFrame
+            projection_series.append({
+                "Date": date,
+                "Projected Target": round(current_simulated_price, 2)
+            })
+
         projection_df = pd.DataFrame(projection_series)
-        
-        # 2. Set 'Date' as the DatetimeIndex (Crucial for Streamlit)
         projection_df.set_index("Date", inplace=True)
-        
+        projection_df.index = pd.to_datetime(projection_df.index)
+
+        if projection_df.empty or projection_df["Projected Target"].isna().all():
+            return None
+
         return projection_df
-        
+
     except Exception as e:
         print(f"Error in forecast engine for {ticker}: {str(e)}")
         return None
