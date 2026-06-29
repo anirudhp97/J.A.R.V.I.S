@@ -89,23 +89,34 @@ def fetch_gold_trend_analysis(ticker, period="1mo"):
         yf_symbol = f"{clean_ticker}.NS"
         yf_ticker = yf.Ticker(yf_symbol)
         history = yf_ticker.history(period=period)
-        
+
         if history.empty or len(history) < 2:
             return {"status": "error", "message": f"Insufficient data available for {clean_ticker} period: {period}"}
-            
+
+        history = history.copy()
+        history['Close'] = pd.to_numeric(history['Close'], errors='coerce')
+        history = history.dropna(subset=['Close'])
+
+        if history.empty:
+            return {"status": "error", "message": f"Insufficient valid price data available for {clean_ticker} period: {period}"}
+
         total_days = len(history)
         if total_days <= 5:
-            sma_window = 2    
+            sma_window = 2
         elif total_days <= 10:
-            sma_window = 5    
+            sma_window = 5
         else:
-            sma_window = min(20, total_days // 2) 
-            
+            sma_window = min(20, total_days // 2)
+
         history['Dynamic_SMA'] = history['Close'].rolling(window=sma_window).mean()
-        
+
         latest_close = float(history['Close'].iloc[-1])
-        sma_value = float(history['Dynamic_SMA'].iloc[-1]) if not pd.isna(history['Dynamic_SMA'].iloc[-1]) else float(history['Close'].mean())
-        percent_deviation = ((latest_close - sma_value) / sma_value) * 100
+        sma_series = history['Dynamic_SMA'].dropna()
+        sma_value = float(sma_series.iloc[-1]) if not sma_series.empty else float(history['Close'].mean())
+        if sma_value == 0:
+            percent_deviation = 0.0
+        else:
+            percent_deviation = ((latest_close - sma_value) / sma_value) * 100
         
         if latest_close > sma_value:
             momentum = f"BULLISH (Trading above the trailing {sma_window}-day baseline)"
@@ -174,7 +185,13 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
             return None
 
         latest_close = trend_data.get("latest_close")
-        if latest_close is None or (isinstance(latest_close, float) and pd.isna(latest_close)):
+        if latest_close is None:
+            return None
+        try:
+            latest_close = float(latest_close)
+        except (TypeError, ValueError):
+            return None
+        if pd.isna(latest_close):
             return None
 
         deviation_pct = trend_data.get("deviation_pct", 0)
