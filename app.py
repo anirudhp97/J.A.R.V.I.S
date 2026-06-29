@@ -82,27 +82,36 @@ st.title("J.A.R.V.I.S.")
 st.caption("System operational. All modules online. Awaiting directives, sir.")
 
 def render_tradingview_gauge_ui(ticker):
-    """ Renders a live visual Technical Analysis gauge with fixed high contrast dark styles. """
+    """
+    Renders the gauge using a CSS-only dark-mode filter 
+    and a custom container frame to match the J.A.R.V.I.S. UI.
+    """
     clean_ticker = str(ticker).upper().replace(" ", "")
+    # The 'invert' filter forces the light-theme widget to appear dark.
+    # The 'hue-rotate' corrects the colors so they aren't 'negative'.
     tv_html = f"""
-    <div class="tradingview-widget-container" style="margin:auto; width:100%; max-width:450px; background-color: transparent;">
-      <div class="tradingview-widget-container__widget"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
-      {{
-        "interval": "1D",
-        "width": "100%",
-        "isTransparent": true,
-        "height": 330,
-        "symbol": "NSE:{clean_ticker}",
-        "showIntervalTabs": true,
-        "displayMode": "single",
-        "locale": "en",
-        "theme": "light"
-      }}
-      </script>
+    <div style="
+        background-color: #0b0202; 
+        border: 2px solid #b97d10; 
+        border-radius: 8px; 
+        padding: 10px;
+        filter: invert(1) hue-rotate(180deg);
+    ">
+        <div class="tradingview-widget-container">
+          <div class="tradingview-widget-container__widget"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+          {{
+            "interval": "1D",
+            "width": "100%",
+            "height": 330,
+            "symbol": "NSE:{clean_ticker}",
+            "theme": "light"
+          }}
+          </script>
+        </div>
     </div>
     """
-    components.html(tv_html, height=350)
+    components.html(tv_html, height=360)
 
 # Initialize Active Ticker
 if "active_ticker" not in st.session_state:
