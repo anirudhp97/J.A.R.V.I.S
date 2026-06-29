@@ -1,351 +1,230 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import io
-import re
-import pandas as pd  
-from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis, fetch_tradingview_gauge
+from pydub import AudioSegment
+from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis, fetch_tradingview_gauge, generate_forecast_chart_data
 from router_agent import classify_intent, generate_financial_forecast, generate_live_price_response, get_tts_bytes, transcribe_audio_with_groq
 
-# ===================================================
-# 0. ADVANCED TEXTSTREAM PARSING MATRIX ENGINE
-# ===================================================
-def parse_llm_response_for_forecast(llm_text_response):
-    """
-    Scans J.A.R.V.I.S.'s verbal text string for a structured DATASTREAM block
-    and dynamically converts those exact numbers into a rendering DataFrame.
-    """
-    if "DATASTREAM_START" not in llm_text_response:
-        return None
-        
-    try:
-        pattern = r"DATASTREAM_START\n(.*?)\nDATASTREAM_END"
-        match = re.search(pattern, llm_text_response, re.DOTALL)
-        
-        if not match:
-            return None 
-            
-        raw_rows = match.group(1).strip().split('\n')
-        projection_series = []
-        
-        for row in raw_rows:
-            if "Projected Target" in row or "---" in row or "Date" in row:
-                continue
-                
-            if "|" in row:
-                parts = row.split("|")
-                date_str = parts[0].strip()
-                price_str = parts[1].strip()
-                
-                # Sanitize out casual symbols (₹, $, letters) safely
-                price_clean = re.sub(r'[^\d.]', '', price_str)
-                
-                if date_str and price_clean:
-                    projection_series.append({
-                        "Date": date_str,
-                        "Projected Target": float(price_clean)
-                    })
-        
-        if not projection_series:
-            return None
-            
-        projection_df = pd.DataFrame(projection_series)
-        projection_df.set_index("Date", inplace=True)
-        return projection_df
-        
-    except Exception as e:
-        print(f"[JARVIS SYSTEM ALARM] Text stream parsing matrix error: {str(e)}")
-        return None
-
-# ===================================================
 # 1. Page Config and Advanced Mark 42 Armor Hybrid Custom CSS Style Block
-# ===================================================
-st.set_page_config(page_title="M.A.R.K. XLII CORE HUD", page_icon="🦾", layout="centered")
+st.set_page_config(page_title="J.A.R.V.I.S. CORE HUD", layout="centered")
 
 st.markdown("""
     <style>
-        /* Deep space cyber background */
-        .stApp {
-            background-color: #0b0202;
-            color: #F7F1E3;
-            font-family: 'Courier New', Courier, monospace;
-            background-image: radial-gradient(circle at 50% 30%, #200404 0%, #0b0202 70%);
+        @keyframes reactorPulse {
+            0% { background-image: radial-gradient(circle at 50% 35%, rgba(0, 229, 255, 0.12) 0%, rgba(11, 2, 2, 0) 45%), radial-gradient(circle at 50% 30%, #200404 0%, #0b0202 70%); }
+            50% { background-image: radial-gradient(circle at 50% 35%, rgba(0, 229, 255, 0.22) 0%, rgba(11, 2, 2, 0) 55%), radial-gradient(circle at 50% 30%, #2a0505 0%, #0b0202 70%); }
+            100% { background-image: radial-gradient(circle at 50% 35%, rgba(0, 229, 255, 0.12) 0%, rgba(11, 2, 2, 0) 45%), radial-gradient(circle at 50% 30%, #200404 0%, #0b0202 70%); }
         }
-        
-        /* Stark Industries Glow Header */
-        h1 {
-            color: #00E5FF !important;
-            text-shadow: 0 0 10px #00E5FF, 0 0 20px #aa0505;
-            letter-spacing: 4px;
-            font-weight: 900;
-            text-align: center;
-        }
-        
-        /* Sidebar Styling: Mark 42 Crimson Armor Plating with Gold Borders */
-        [data-testid="stSidebar"] {
-            background-color: #1a0505 !important;
-            border-right: 3px solid #b97d10 !important;
-            box-shadow: 5px 0px 15px rgba(185, 125, 16, 0.2);
-        }
-        
-        /* Chat Bubble Custom Formatting overrides */
-        .stChatMessage {
-            border-radius: 6px !important;
-            padding: 15px !important;
-            margin-bottom: 12px !important;
-            background-color: rgba(21, 5, 5, 0.85) !important;
-            border: 1px solid #4d0907 !important;
-        }
-        
-        [data-testid="stChatMessage"] div {
-            font-family: 'Courier New', Courier, monospace !important;
-        }
-        
-        .stCaption {
-            color: #b97d10 !important;
-            text-shadow: 0 0 3px rgba(185, 125, 16, 0.5);
-            text-align: center;
-            font-weight: bold;
-        }
-        
-        hr {
-            border-color: #b97d10 !important;
-        }
-
-        /* TRADINGVIEW IFRAME LIGHT-THEME INJECTION LAYER */
-        div[data-testid="stHtmlWrapper"] span, 
-        div[data-testid="stHtmlWrapper"] p, 
-        div[data-testid="stHtmlWrapper"] div,
-        div[data-testid="stHtmlWrapper"] b {
-            color: #ffffff !important;
-        }
-        div[class*="dropdown"], select, option, button {
-            color: #ffffff !important;
-        }
+        .stApp { background-color: #0b0202; color: #F7F1E3; font-family: 'Courier New', Courier, monospace; animation: reactorPulse 6s infinite ease-in-out; background-attachment: fixed; }
+        h1 { color: #00E5FF !important; text-shadow: 0 0 10px #00E5FF, 0 0 20px #aa0505; letter-spacing: 4px; font-weight: 900; text-align: center; }
+        [data-testid="stSidebar"] { background-color: #1a0505 !important; border-right: 3px solid #b97d10 !important; box-shadow: 5px 0px 15px rgba(185, 125, 16, 0.2); }
+        .stChatMessage { border-radius: 6px !important; padding: 15px !important; margin-bottom: 12px !important; background-color: rgba(21, 5, 5, 0.85) !important; border: 1px solid #4d0907 !important; }
+        [data-testid="stChatMessage"] div { font-family: 'Courier New', Courier, monospace !important; }
+        .stCaption { color: #b97d10 !important; text-shadow: 0 0 3px rgba(185, 125, 16, 0.5); text-align: center; font-weight: bold; }
+        hr { border-color: #b97d10 !important; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("J.A.R.V.I.S.")
-st.caption("Systems Operational. Core Diagnostics Active. Awaiting Command Input...")
+st.caption("System operational. All modules online. Awaiting directives, sir.")
 
-# Analytics Control Console on Sidebar (Champagne Gold Accents)
+def render_tradingview_gauge_ui(ticker):
+    """ Renders a live, responsive visual Technical Analysis gauge in the UI. """
+    clean_ticker = str(ticker).upper().replace(" ", "")
+    tv_html = f"""
+    <div class="tradingview-widget-container" style="margin:auto; width:100%; max-width:450px;">
+      <div class="tradingview-widget-container__widget"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+      {{
+        "interval": "1D", "width": "100%", "isTransparent": true, "height": 360,
+        "symbol": "NSE:{clean_ticker}", "showIntervalTabs": true, "displayMode": "single", "locale": "en", "theme": "dark"
+      }}
+      </script>
+    </div>
+    """
+    components.html(tv_html, height=380)
+
+# --- INITIALIZE CORE ACTIVE TICKER STATE BEFORE SELECTBOX ---
+if "active_ticker" not in st.session_state:
+    st.session_state.active_ticker = "GOLDBEES"
+
+# Sidebar System Controls
 st.sidebar.markdown("<h3 style='color:#b97d10; text-shadow: 0 0 5px #b97d10;'>🛡️ ARMOR DIAGNOSTICS</h3>", unsafe_allow_html=True)
 
-# Multi-Asset Tracker Selector Matrix
+ticker_options = ["GOLDBEES", "SILVERBEES", "NIFTYBEES"]
+try:
+    current_ticker_index = ticker_options.index(st.session_state.active_ticker)
+except ValueError:
+    current_ticker_index = 0
+
 selected_ticker = st.sidebar.selectbox(
-    "Select Target Core Vector:",
-    options=["GOLDBEES", "SILVERBEES", "NIFTYBEES"],
-    index=0,
+    "Select Target Core Vector:", 
+    options=ticker_options, 
+    index=current_ticker_index,
     format_func=lambda x: {
-        "GOLDBEES": "🥇 GOLD BeES Monitor",
-        "SILVERBEES": "🥈 SILVER BeES Monitor",
+        "GOLDBEES": "🥇 GOLD BeES Monitor", 
+        "SILVERBEES": "🥈 SILVER BeES Monitor", 
         "NIFTYBEES": "📈 NIFTY BeES Index"
     }[x]
 )
 
+if selected_ticker != st.session_state.active_ticker:
+    st.session_state.active_ticker = selected_ticker
+    st.rerun()
+
 selected_timeframe = st.sidebar.selectbox(
-    "Select Trajectory Horizon:",
-    options=["5d", "1mo", "3mo", "1y"],
-    index=1,
-    format_func=lambda x: {
-        "5d": "Past Week [5 Days]",
-        "1mo": "Past Month [30 Days]",
-        "3mo": "Quarterly Trend [3M]",
-        "1y": "Annual Trend [1Y]"
-    }[x]
+    "Select Trajectory Horizon:", options=["5d", "1mo", "3mo", "1y"], index=1,
+    format_func=lambda x: {"5d": "Past Week [5 Days]", "1mo": "Past Month [30 Days]", "3mo": "Quarterly Trend [3M]", "1y": "Annual Trend [1Y]"}[x]
 )
 
-# --- LIVE TRADINGVIEW GAUGE SIDEBAR INJECTION ---
-try:
-    tv_data = fetch_tradingview_gauge(selected_ticker, timeframe=selected_timeframe)
-    if tv_data and tv_data.get("status") == "success":
-        rec = tv_data.get("recommendation", "NEUTRAL")
-        buy = tv_data.get("buy_signals", 0)
-        sell = tv_data.get("sell_signals", 0)
-        
-        # Micro color engine matching Stark aesthetics
-        if "BUY" in rec:
-            gauge_color = "#4AF2A1"
-        elif "SELL" in rec:
-            gauge_color = "#FF4B4B"
-        else:
-            gauge_color = "#FCE154"
-            
-        tv_html = f"""
-        <span style='color: #00E5FF; font-size: 11px; font-weight: bold;'>TRADINGVIEW GAUGES</span><br>
-        <span style='color: {gauge_color}; font-size: 13px; font-weight: bold;'>CONSENSUS: {rec}</span><br>
-        <span style='color: #F7F1E3; font-size: 10px;'>B: {buy} | S: {sell}</span><br>
-        """
-    else:
-        tv_html = "<span style='color: #FF4B4B; font-size: 10px;'>TV STREAM: OFFLINE</span><br>"
-except Exception:
-    tv_html = "<span style='color: #FF4B4B; font-size: 10px;'>TV STREAM: ERROR</span><br>"
+# Initialize Session State Machine Variables
+if "messages" not in st.session_state:
+    st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
+if "audio_played" not in st.session_state:
+    st.session_state.audio_played = False
+if "last_valid_prompt" not in st.session_state:
+    st.session_state.last_valid_prompt = None
+if "awaiting_graph_confirmation" not in st.session_state:
+    st.session_state.awaiting_graph_confirmation = False
+# Temporary staging cache to retain metrics between confirmation turns
+if "staged_trend_data" not in st.session_state:
+    st.session_state.staged_trend_data = None
 
 st.sidebar.markdown(f"""
-<div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px;'>
+<div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px; margin-bottom: 15px;'>
     <span style='color: #00E5FF; font-size: 11px; font-weight: bold; letter-spacing: 1px;'>HUD CHANNEL FEED</span><br>
-    <span style='color: #4AF2A1; font-size: 12px;'>● ACTIVE VECT: {selected_ticker}</span><br>
-    <hr style='margin: 8px 0; border-color: rgba(185, 125, 16, 0.3) !important;'>
-    {tv_html}
-    <hr style='margin: 8px 0; border-color: rgba(185, 125, 16, 0.3) !important;'>
+    <span style='color: #4AF2A1; font-size: 12px;'>● ACTIVE VECT: {st.session_state.active_ticker}</span><br>
     <span style='color: #FCE154; font-size: 10px;'>CORE STABILITY: LOCKED</span>
 </div>
 """, unsafe_allow_html=True)
 
-# ===================================================
-# 2. Session State Vector Initialization
-# ===================================================
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant", 
-            "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."
-        }
-    ]
-if "audio_played" not in st.session_state:
-    st.session_state.audio_played = False
-if "awaiting_graph_confirmation" not in st.session_state:
-    st.session_state.awaiting_graph_confirmation = False
-if "staged_trend_data" not in st.session_state:
-    st.session_state.staged_trend_data = None
+st.sidebar.markdown("<h3 style='color:#00E5FF; text-shadow: 0 0 5px #00E5FF;'>📊 HUD VISUALS</h3>", unsafe_allow_html=True)
+with st.sidebar.expander(f"🔮 {st.session_state.active_ticker} Core Consensus", expanded=True):
+    render_tradingview_gauge_ui(st.session_state.active_ticker)
 
-# ===================================================
-# 3. Render Historical Chat Log with Custom Overrides
-# ===================================================
+# --- DISPLAY CHAT FLOW ARCHITECTURE (WITH INLINE RENDERING) ---
 for index, message in enumerate(st.session_state.messages):
-    message_payload = message.get("content", "")
-    role = message.get("role", "user")
+    prefix = "T. STARK [COM-LINK]:" if message["role"] == "user" else "J.A.R.V.I.S.:"
+    text_color = "#FCC200" if message["role"] == "user" else "#00E5FF"
     
-    if role == "user":
-        prefix = "T. STARK [COM-LINK]:"
-        text_color = "#FCC200" 
-    else:
-        prefix = "J.A.R.V.I.S.:"
-        text_color = "#00E5FF" 
-        
-    with st.chat_message(role):
-        if "DATASTREAM_START" in message_payload:
-            display_text = re.sub(r"DATASTREAM_START\n.*?\nDATASTREAM_END", "", message_payload, flags=re.DOTALL).strip()
-        else:
-            display_text = message_payload
+    with st.chat_message(message["role"]):
+        if message["type"] == "text":
+            st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> <span style='color:#E2F1FF;'>{message['content']}</span>", unsafe_allow_html=True)
             
-        st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> <span style='color:#E2F1FF;'>{display_text}</span>", unsafe_allow_html=True)
-        
-        forecast_df = parse_llm_response_for_forecast(message_payload)
-        if forecast_df is not None:
-            st.markdown("### 📊 PROJECTED HORIZON DATASTREAM:")
-            st.line_chart(forecast_df)
-            st.dataframe(forecast_df, use_container_width=True)
-
-        if role == "assistant" and not st.session_state.audio_played and (index == len(st.session_state.messages) - 1):
-            with st.spinner("Initializing vocal transmission channels..."):
-                audio_bytes = get_tts_bytes(display_text)
-                if audio_bytes:
-                    st.audio(audio_bytes, format="audio/wav", autoplay=True)
-            st.session_state.audio_played = True
+            # Autoplay last response vocalization track
+            if message["role"] == "assistant" and (index == len(st.session_state.messages) - 1) and not st.session_state.audio_played:
+                with st.spinner("Initializing vocal transmission channels..."):
+                    audio_bytes = get_tts_bytes(message["content"])
+                    if audio_bytes:
+                        st.audio(audio_bytes, format="audio/wav", autoplay=True)
+                        st.session_state.audio_played = True
+                        
+        elif message["type"] == "forecast_chart":
+            # The chart is now locked directly inside the message layout history chain
+            st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 PROJECTED HORIZON DATASTREAM:</span>", unsafe_allow_html=True)
+            forecast_data = generate_forecast_chart_data(message["ticker"], message["trend_data"], forecast_periods=5)
+            if forecast_data is not None and not forecast_data.empty:
+                st.line_chart(forecast_data, y="Projected Target", color="#ffaa00")
+                st.caption(f"Predictive tracking simulation captured historically for vector {message['ticker']}.")
+            else:
+                st.error("Sir, target graphical datablock corrupted inside logs.")
 
 st.divider()
 
-# ===================================================
-# 4. Input Controls Framework
-# ===================================================
+# Input UI Controls
 if "mic_rotation_counter" not in st.session_state:
     st.session_state.mic_rotation_counter = 0
 
-widget_key = f"voice_recorder_v_{st.session_state.mic_rotation_counter}_{selected_ticker}"
+widget_key = f"voice_recorder_v_{st.session_state.mic_rotation_counter}_{st.session_state.active_ticker}"
 audio_file = st.audio_input("🎙️ ACTIVATE VOCAL RECEIVER", key=widget_key)
 user_text_input = st.chat_input("Input terminal override command here...")
 
 processed_prompt = None
 
-# Pipeline Phase 1: Input Audio Capture & Groq Cloud STT Processing
 if audio_file:
-    with st.spinner("Decoding vocal sequence arrays via Groq Matrix..."):
+    with st.spinner("Decoding vocal sequence arrays via Groq Whisper..."):
         try:
             audio_bytes_raw = audio_file.read()
-            audio_buffer = io.BytesIO(audio_bytes_raw)
-            detected_text = transcribe_audio_with_groq(audio_buffer)
-            
-            if detected_text:
-                processed_prompt = detected_text
-            else:
-                st.error("Signal interference detected by Groq Node. Please re-transmit.")
-                
+            audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes_raw))
+            wav_buffer = io.BytesIO()
+            audio_segment.export(wav_buffer, format="wav")
+            wav_buffer.seek(0)
+            detected_text = transcribe_audio_with_groq(wav_buffer)
+            if detected_text: processed_prompt = detected_text
             st.session_state.mic_rotation_counter += 1
-                
         except Exception as e:
             st.error(f"Core communication breakdown: {str(e)}.")
             st.session_state.mic_rotation_counter += 1
-
 elif user_text_input:
     processed_prompt = user_text_input
 
-# ===================================================
-# 5. Pipeline Phase 2: Agentic Routing and Operational Loop
-# ===================================================
+# Main Pipeline Execution
 if processed_prompt:
-    cleaned_prompt = processed_prompt.upper().strip()
-    st.session_state.messages.append({"role": "user", "content": processed_prompt})
+    clean_prompt = processed_prompt.upper().strip()
     
-    with st.spinner("J.A.R.V.I.S. is compiling data streams..."):
-        
-        if st.session_state.get("awaiting_graph_confirmation", False):
-            if "YES" in cleaned_prompt:
-                jarvis_response = (
-                    f"Acknowledged, sir. Compiling the visual trajectory projection metrics for {selected_ticker}.\n\n"
-                    "Here is the projected datastream sequence for the upcoming session windows:\n\n"
-                )
-                
-                generation_prompt = (
-                    f"Generate a short 4-5 business day forecast response for {selected_ticker} "
-                    "concluding with the mandatory DATASTREAM_START and DATASTREAM_END block containing dates and projected target prices."
-                )
-                
-                news_headlines = fetch_market_news(selected_ticker)
-                tv_gauge = fetch_tradingview_gauge(selected_ticker, timeframe=selected_timeframe)
-                
-                jarvis_response += generate_financial_forecast(
-                    generation_prompt, 
-                    fetch_live_stock_price(selected_ticker), 
-                    news_headlines, 
-                    st.session_state.staged_trend_data, 
-                    tv_gauge, 
-                    ticker=selected_ticker
-                )
-                st.session_state.awaiting_graph_confirmation = False
-            else:
-                jarvis_response = "Understood, sir. Trajectory plotting stands down. Standing by for further monitoring requests."
-                st.session_state.awaiting_graph_confirmation = False
-        
+    is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE", "PROJECT"])
+    is_negation = any(clean_prompt.startswith(word) for word in ["NO", "DON'T", "STOP", "NEVER", "SKIP", "NAH"])
+    
+    st.session_state.messages.append({"role": "user", "type": "text", "content": processed_prompt})
+    
+    # Logic Gate: Graph Confirmation State Flow
+    if st.session_state.awaiting_graph_confirmation:
+        st.session_state.awaiting_graph_confirmation = False
+        if is_confirmation:
+            # Append chart directly behind the question turn in history logs
+            st.session_state.messages.append({
+                "role": "assistant",
+                "type": "forecast_chart",
+                "ticker": st.session_state.active_ticker,
+                "trend_data": st.session_state.staged_trend_data
+            })
+            jarvis_response = f"Understood, sir. Initializing rendering sequences. Visual forecast tracks for the {st.session_state.active_ticker} vector have been securely committed to the logs above."
+        elif is_negation:
+            jarvis_response = "Acknowledged, sir. Bypassing graphical predictive tracking. I shall keep a silent watch on active telemetry frequencies on standby."
         else:
-            # Standard Path Intent Evaluation
+            jarvis_response = "Telemetry projection reset, sir. State your objective: live price tracking or trend analysis modeling."
+            
+        st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
+        st.session_state.staged_trend_data = None # Wipe temporary cache turn
+            
+    # Standard Context Processing Flow
+    else:
+        if any(w in clean_prompt for w in ["GOLD BEES", "GOLDBEES", "PRICE OF GOLD"]): st.session_state.active_ticker = "GOLDBEES"
+        elif any(w in clean_prompt for w in ["SILVER BEES", "SILVERBEES"]): st.session_state.active_ticker = "SILVERBEES"
+        elif any(w in clean_prompt for w in ["NIFTY BEES", "NIFTYBEES"]): st.session_state.active_ticker = "NIFTYBEES"
+        
+        target_ticker = st.session_state.active_ticker
+        
+        with st.spinner("J.A.R.V.I.S. is compiling data streams..."):
             intent = classify_intent(processed_prompt)
-            trend_data = fetch_gold_trend_analysis(selected_ticker, period=selected_timeframe)
-            price_data = fetch_live_stock_price(selected_ticker)
+            trend_data = fetch_gold_trend_analysis(target_ticker, period=selected_timeframe)
+            price_data = fetch_live_stock_price(target_ticker)
             
             if intent == "LIVE":
                 if price_data["status"] == "success":
                     jarvis_response = generate_live_price_response(processed_prompt, price_data, trend_data)
                 else:
                     jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
+                st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
                     
             elif intent == "NEWS":
-                news_headlines = fetch_market_news(selected_ticker)
-                tv_gauge = fetch_tradingview_gauge(selected_ticker, timeframe=selected_timeframe)
+                news_headlines = fetch_market_news(target_ticker)
+                tv_gauge = fetch_tradingview_gauge(target_ticker, timeframe=selected_timeframe)
                 
                 base_forecast = generate_financial_forecast(
-                    processed_prompt, price_data, news_headlines, trend_data, tv_gauge, ticker=selected_ticker
+                    processed_prompt, price_data, news_headlines, trend_data, tv_gauge, ticker=target_ticker
                 )
                 
-                jarvis_response = base_forecast + f"\n\nShall I project the dynamic visual trend trajectory forecast chart for {selected_ticker} across the upcoming trading sessions, sir?"
+                jarvis_response = base_forecast + f"\n\nShall I project the dynamic visual trend trajectory forecast chart for {target_ticker} across the upcoming trading sessions, sir?"
                 
+                # Cache parameters to regenerate later if user confirms yes
                 st.session_state.staged_trend_data = trend_data
                 st.session_state.awaiting_graph_confirmation = True
+                st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
                 
             else:
-                jarvis_response = (
-                    f"At your service, sir. The system's diagnostic analytics are currently targeted at the {selected_ticker} vector "
-                    f"across a {selected_timeframe} horizon. Specify if you would like me to extract live price telemetry or formulate a macro prediction."
-                )
-            
-    st.session_state.messages.append({"role": "assistant", "content": jarvis_response})
-    st.session_state.audio_played = False
+                jarvis_response = f"At your service, sir. Systems are focused on the {target_ticker} tracking array. Specify if you require real-time price monitoring or a predictive analysis block."
+                st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
+
+    st.session_state.audio_played = False  
+    st.rerun()

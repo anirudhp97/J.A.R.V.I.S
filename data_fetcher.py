@@ -152,3 +152,51 @@ def fetch_tradingview_gauge(ticker, timeframe="1d"):
             "status": "error",
             "message": f"Failed to connect to TradingView core database: {str(e)}"
         }
+
+def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
+    """
+    Computes a forward-looking mathematical trajectory projection matrix 
+    derived from rolling momentum coefficients and deviation baselines.
+    """
+    try:
+        if not trend_data or trend_data.get("status") == "error":
+            return None
+            
+        latest_close = trend_data.get("latest_close")
+        deviation_pct = trend_data.get("deviation_pct", 0)
+        momentum_str = trend_data.get("momentum", "").upper()
+        
+        # Calculate daily drift coefficient based on tracking matrix momentum
+        drift_percentage = (deviation_pct / 100) / 10.0  
+        if "BULLISH" in momentum_str:
+            drift_direction = 1.0
+            if drift_percentage <= 0: drift_percentage = 0.001
+        elif "BEARISH" in momentum_str:
+            drift_direction = -1.0
+            if drift_percentage >= 0: drift_percentage = -0.001
+        else:
+            drift_direction = 0.0
+            drift_percentage = 0.0
+            
+        projection_series = []
+        current_simulated_price = latest_close
+        
+        # Generate future business day timestamps starting tomorrow
+        future_dates = pd.date_range(start=pd.Timestamp.now() + pd.Timedelta(days=1), periods=forecast_periods, freq='B')
+        
+        for date in future_dates:
+            # Apply iterative momentum drift decay model
+            step_change = current_simulated_price * drift_percentage * drift_direction
+            current_simulated_price += step_change
+            projection_series.append({
+                "Date": date.strftime('%Y-%m-%d'),
+                "Projected Target": round(current_simulated_price, 2)
+            })
+            
+        projection_df = pd.DataFrame(projection_series)
+        projection_df.set_index("Date", inplace=True)
+        return projection_df
+    except Exception as e:
+        # Variable injected into systemic telemetry alert log
+        print(f"[JARVIS SYSTEM ALARM] Forecast modeling projection loop error for {ticker}: {str(e)}")
+        return None
