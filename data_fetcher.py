@@ -155,9 +155,11 @@ def fetch_tradingview_gauge(ticker, timeframe="1d"):
 
 def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
     """
-    Generates a momentum-based drift projection and returns a clean 
-    DataFrame for direct rendering in Streamlit.
+    Generates a momentum-based drift projection.
+    Returns a DataFrame with a DatetimeIndex for perfect Streamlit rendering.
     """
+    # Note: 'ticker' can be used here for ticker-specific drift sensitivity 
+    # (e.g., higher volatility for NIFTYBEES vs GOLDBEES).
     try:
         if not trend_data or trend_data.get("status") == "error":
             return None
@@ -166,7 +168,7 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
         deviation_pct = trend_data.get("deviation_pct", 0)
         momentum_str = trend_data.get("momentum", "").upper()
         
-        # Calculate drift based on moving average deviation
+        # Calculate drift
         drift_percentage = (deviation_pct / 100) / 10.0  
         if "BULLISH" in momentum_str:
             drift_direction = 1.0
@@ -180,24 +182,24 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
             
         projection_series = []
         current_simulated_price = latest_close
-        
-        # Generate future business day timestamps
         future_dates = pd.date_range(start=pd.Timestamp.now() + pd.Timedelta(days=1), periods=forecast_periods, freq='B')
         
         for date in future_dates:
-            # Apply iterative momentum drift decay model
             step_change = current_simulated_price * drift_percentage * drift_direction
             current_simulated_price += step_change
             projection_series.append({
-                "Date": date.strftime('%Y-%m-%d'),
+                "Date": date, # Keep as Timestamp object
                 "Projected Target": round(current_simulated_price, 2)
             })
             
-        # Create DataFrame - Note: Do not set Date as index to allow Streamlit 
-        # to map the x-axis explicitly via st.line_chart parameters.
+        # 1. Create DataFrame
         projection_df = pd.DataFrame(projection_series)
+        
+        # 2. Set 'Date' as the DatetimeIndex (Crucial for Streamlit)
+        projection_df.set_index("Date", inplace=True)
+        
         return projection_df
         
     except Exception as e:
-        print(f"Error in forecast engine: {str(e)}")
+        print(f"Error in forecast engine for {ticker}: {str(e)}")
         return None
