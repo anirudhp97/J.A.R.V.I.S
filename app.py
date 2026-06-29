@@ -191,13 +191,21 @@ for index, message in enumerate(st.session_state.messages):
         elif message["type"] == "forecast_chart":
             st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 PROJECTED HORIZON DATASTREAM:</span>", unsafe_allow_html=True)
             
-            # Look for extracted text inside history state block block first
+            # 1. Retrieve raw data
             forecast_data = parse_llm_response_for_forecast(message["llm_source_text"])
             if forecast_data is None:
                 forecast_data = generate_forecast_chart_data(message["ticker"], message["trend_data"], forecast_periods=5)
                 
             if forecast_data is not None and not forecast_data.empty:
-                st.line_chart(data=forecast_data, x="Date", y="Projected Target", color="#ffaa00")
+                # 2. Ensure the 'Date' column is converted to proper Datetime objects
+                # This allows Streamlit/Pandas to interpret it as a time-series axis
+                forecast_data['Date'] = pd.to_datetime(forecast_data['Date'])
+                
+                # 3. Setting the index allows st.line_chart to automatically map the timeline
+                df_to_plot = forecast_data.set_index('Date')
+                
+                # 4. Render using the indexed dataframe
+                st.line_chart(df_to_plot, y="Projected Target", color="#ffaa00")
                 st.caption(f"Predictive tracking simulation captured from vector context data matrix for {message['ticker']}.")
             else:
                 st.error("Sir, target graphical datablock corrupted inside logs.")
