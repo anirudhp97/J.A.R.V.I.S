@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import io
 from pydub import AudioSegment
-from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis, fetch_tradingview_gauge, fetch_historical_chart_data
+from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis, fetch_tradingview_gauge, generate_forecast_chart_data
 from router_agent import classify_intent, generate_financial_forecast, generate_live_price_response, get_tts_bytes, transcribe_audio_with_groq
 
 # 1. Page Config and Advanced Mark 42 Armor Hybrid Custom CSS Style Block
@@ -29,7 +29,7 @@ st.title("J.A.R.V.I.S.")
 st.caption("System operational. All modules online. Awaiting directives, sir.")
 
 def render_tradingview_gauge_ui(ticker):
-    """ Renders a live, responsive visual Technical Analysis gauge in the UI via user's browser. """
+    """ Renders a live, responsive visual Technical Analysis gauge in the UI. """
     clean_ticker = str(ticker).upper().replace(" ", "")
     tv_html = f"""
     <div class="tradingview-widget-container" style="margin:auto; width:100%; max-width:450px;">
@@ -68,7 +68,6 @@ selected_ticker = st.sidebar.selectbox(
     }[x]
 )
 
-# CRITICAL BUG FIX: Synchronize dropdown updates immediately to refresh browser iframe hooks
 if selected_ticker != st.session_state.active_ticker:
     st.session_state.active_ticker = selected_ticker
     st.rerun()
@@ -80,15 +79,16 @@ selected_timeframe = st.sidebar.selectbox(
 
 # Initialize Session State Machine Variables
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
+    st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
 if "audio_played" not in st.session_state:
     st.session_state.audio_played = False
 if "last_valid_prompt" not in st.session_state:
     st.session_state.last_valid_prompt = None
 if "awaiting_graph_confirmation" not in st.session_state:
     st.session_state.awaiting_graph_confirmation = False
-if "render_active_graph" not in st.session_state:
-    st.session_state.render_active_graph = False
+# Temporary staging cache to retain metrics between confirmation turns
+if "staged_trend_data" not in st.session_state:
+    st.session_state.staged_trend_data = None
 
 st.sidebar.markdown(f"""
 <div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px; margin-bottom: 15px;'>
@@ -98,36 +98,36 @@ st.sidebar.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar HUD Visual components
 st.sidebar.markdown("<h3 style='color:#00E5FF; text-shadow: 0 0 5px #00E5FF;'>📊 HUD VISUALS</h3>", unsafe_allow_html=True)
 with st.sidebar.expander(f"🔮 {st.session_state.active_ticker} Core Consensus", expanded=True):
     render_tradingview_gauge_ui(st.session_state.active_ticker)
 
-# Display historical main chat loop
+# --- DISPLAY CHAT FLOW ARCHITECTURE (WITH INLINE RENDERING) ---
 for index, message in enumerate(st.session_state.messages):
     prefix = "T. STARK [COM-LINK]:" if message["role"] == "user" else "J.A.R.V.I.S.:"
     text_color = "#FCC200" if message["role"] == "user" else "#00E5FF"
+    
     with st.chat_message(message["role"]):
-        st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> <span style='color:#E2F1FF;'>{message['content']}</span>", unsafe_allow_html=True)
-        
-        if message["role"] == "assistant" and (index == len(st.session_state.messages) - 1) and not st.session_state.audio_played:
-            with st.spinner("Initializing vocal transmission channels..."):
-                audio_bytes = get_tts_bytes(message["content"])
-                if audio_bytes:
-                    st.audio(audio_bytes, format="audio/wav", autoplay=True)
-                    st.session_state.audio_played = True
-
-# --- DYNAMIC CHART TELEMETRY PLOTTING BLOCK ---
-if st.session_state.render_active_graph:
-    st.markdown("---")
-    st.subheader(f"📊 {st.session_state.active_ticker} Historical Telemetry Mapping")
-    with st.spinner("Rendering historical trend vectors..."):
-        chart_data = fetch_historical_chart_data(st.session_state.active_ticker, period=selected_timeframe)
-        if chart_data is not None and not chart_data.empty:
-            st.line_chart(chart_data, y="Close", color="#00e5ff")
-            st.caption(f"Historical line display depicting trailing closing prices across a {selected_timeframe} tracking index.")
-        else:
-            st.error("Sir, historical chart blocks are currently offline due to a data link timeout.")
+        if message["type"] == "text":
+            st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> <span style='color:#E2F1FF;'>{message['content']}</span>", unsafe_allow_html=True)
+            
+            # Autoplay last response vocalization track
+            if message["role"] == "assistant" and (index == len(st.session_state.messages) - 1) and not st.session_state.audio_played:
+                with st.spinner("Initializing vocal transmission channels..."):
+                    audio_bytes = get_tts_bytes(message["content"])
+                    if audio_bytes:
+                        st.audio(audio_bytes, format="audio/wav", autoplay=True)
+                        st.session_state.audio_played = True
+                        
+        elif message["type"] == "forecast_chart":
+            # The chart is now locked directly inside the message layout history chain
+            st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 PROJECTED HORIZON DATASTREAM:</span>", unsafe_allow_html=True)
+            forecast_data = generate_forecast_chart_data(message["ticker"], message["trend_data"], forecast_periods=5)
+            if forecast_data is not None and not forecast_data.empty:
+                st.line_chart(forecast_data, y="Projected Target", color="#ffaa00")
+                st.caption(f"Predictive tracking simulation captured historically for vector {message['ticker']}.")
+            else:
+                st.error("Sir, target graphical datablock corrupted inside logs.")
 
 st.divider()
 
@@ -162,24 +162,30 @@ elif user_text_input:
 if processed_prompt:
     clean_prompt = processed_prompt.upper().strip()
     
-    # Check Confirmation Signals
-    is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE"])
+    is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE", "PROJECT"])
     is_negation = any(clean_prompt.startswith(word) for word in ["NO", "DON'T", "STOP", "NEVER", "SKIP", "NAH"])
     
-    st.session_state.messages.append({"role": "user", "content": processed_prompt})
+    st.session_state.messages.append({"role": "user", "type": "text", "content": processed_prompt})
     
     # Logic Gate: Graph Confirmation State Flow
     if st.session_state.awaiting_graph_confirmation:
         st.session_state.awaiting_graph_confirmation = False
         if is_confirmation:
-            st.session_state.render_active_graph = True
-            jarvis_response = f"Understood, sir. Initializing rendering sequences. Visual coordinates for the {st.session_state.active_ticker} vector have been mapped to the main projection display screen."
+            # Append chart directly behind the question turn in history logs
+            st.session_state.messages.append({
+                "role": "assistant",
+                "type": "forecast_chart",
+                "ticker": st.session_state.active_ticker,
+                "trend_data": st.session_state.staged_trend_data
+            })
+            jarvis_response = f"Understood, sir. Initializing rendering sequences. Visual forecast tracks for the {st.session_state.active_ticker} vector have been securely committed to the logs above."
         elif is_negation:
-            st.session_state.render_active_graph = False
-            jarvis_response = "Acknowledged, sir. Bypassing graphical rendering sequences. I shall continue to monitor active telemetry frequencies on standby."
+            jarvis_response = "Acknowledged, sir. Bypassing graphical predictive tracking. I shall keep a silent watch on active telemetry frequencies on standby."
         else:
-            st.session_state.render_active_graph = False
-            jarvis_response = "Telemetry tracking reset, sir. State your objective: live price calculation or macro forecast modeling."
+            jarvis_response = "Telemetry projection reset, sir. State your objective: live price tracking or trend analysis modeling."
+            
+        st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
+        st.session_state.staged_trend_data = None # Wipe temporary cache turn
             
     # Standard Context Processing Flow
     else:
@@ -199,6 +205,7 @@ if processed_prompt:
                     jarvis_response = generate_live_price_response(processed_prompt, price_data, trend_data)
                 else:
                     jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
+                st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
                     
             elif intent == "NEWS":
                 news_headlines = fetch_market_news(target_ticker)
@@ -208,13 +215,16 @@ if processed_prompt:
                     processed_prompt, price_data, news_headlines, trend_data, tv_gauge, ticker=target_ticker
                 )
                 
-                # Append dynamic graph injection question block
-                jarvis_response = base_forecast + f"\n\nShall I compile and project the interactive visual trend trajectory chart for {target_ticker} across this {selected_timeframe} matrix frame, sir?"
+                jarvis_response = base_forecast + f"\n\nShall I project the dynamic visual trend trajectory forecast chart for {target_ticker} across the upcoming trading sessions, sir?"
+                
+                # Cache parameters to regenerate later if user confirms yes
+                st.session_state.staged_trend_data = trend_data
                 st.session_state.awaiting_graph_confirmation = True
+                st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
                 
             else:
-                jarvis_response = f"At your service, sir. Systems are focused on the {target_ticker} tracking array across a {selected_timeframe} horizon. Specify if you require real-time price monitoring or a predictive analysis block."
+                jarvis_response = f"At your service, sir. Systems are focused on the {target_ticker} tracking array. Specify if you require real-time price monitoring or a predictive analysis block."
+                st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
 
-    st.session_state.messages.append({"role": "assistant", "content": jarvis_response})
     st.session_state.audio_played = False  
     st.rerun()

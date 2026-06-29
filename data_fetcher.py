@@ -8,6 +8,7 @@ def fetch_live_stock_price(ticker):
     Fetches the true real-time Last Traded Price (LTP) 
     directly from the National Stock Exchange of India with smart asset naming.
     """
+    clean_ticker = str(ticker).upper().strip()
     asset_labels = {
         "GOLDBEES": "Nippon India ETF Gold BeES",
         "SILVERBEES": "Nippon India ETF Silver BeES",
@@ -15,33 +16,37 @@ def fetch_live_stock_price(ticker):
     }
     
     try:
-        raw_data = nse_eq(ticker)
-        company_name = raw_data.get('info', {}).get('companyName')
+        raw_data = nse_eq(clean_ticker)
+        company_name = None
+        if isinstance(raw_data, dict):
+            company_name = raw_data.get('info', {}).get('companyName')
         
         if not company_name:
-            company_name = asset_labels.get(ticker.upper(), ticker)
+            company_name = asset_labels.get(clean_ticker, clean_ticker)
             
-        ltp = raw_data.get('priceInfo', {}).get('lastPrice', None)
+        ltp = None
+        if isinstance(raw_data, dict):
+            ltp = raw_data.get('priceInfo', {}).get('lastPrice', None)
         
         if not ltp:
-            ltp = nse_quote_ltp(ticker)
+            ltp = nse_quote_ltp(clean_ticker)
 
         return {
             "status": "success",
-            "ticker": ticker,
+            "ticker": clean_ticker,
             "company": company_name,
             "price": ltp
         }
     except Exception as e:
         try:
-            yf_symbol = f"{ticker}.NS"
+            yf_symbol = f"{clean_ticker}.NS"
             yf_ticker = yf.Ticker(yf_symbol)
             live_price = yf_ticker.fast_info.last_price
             
             return {
                 "status": "success",
-                "ticker": ticker,
-                "company": asset_labels.get(ticker.upper(), ticker),
+                "ticker": clean_ticker,
+                "company": asset_labels.get(clean_ticker, clean_ticker),
                 "price": round(live_price, 2)
             }
         except Exception as inner_error:
@@ -52,12 +57,13 @@ def fetch_market_news(ticker):
     Scrapes real-time market news summaries using Yahoo Finance vectors.
     """
     try:
-        yf_symbol = f"{ticker}.NS"
+        clean_ticker = str(ticker).upper().strip()
+        yf_symbol = f"{clean_ticker}.NS"
         yf_ticker = yf.Ticker(yf_symbol)
         news_list = yf_ticker.news
         
         if not news_list:
-            return f"No synchronized mainstream headlines available for {ticker} vector at this period."
+            return f"No synchronized mainstream headlines available for {clean_ticker} vector at this period."
             
         compiled_headlines = ""
         for index, item in enumerate(news_list[:3]):
@@ -74,12 +80,13 @@ def fetch_gold_trend_analysis(ticker, period="1mo"):
     Generates a trend momentum blueprint using rolling Simple Moving Averages.
     """
     try:
-        yf_symbol = f"{ticker}.NS"
+        clean_ticker = str(ticker).upper().strip()
+        yf_symbol = f"{clean_ticker}.NS"
         yf_ticker = yf.Ticker(yf_symbol)
         history = yf_ticker.history(period=period)
         
         if history.empty or len(history) < 2:
-            return {"status": "error", "message": f"Insufficient data available for {ticker} period: {period}"}
+            return {"status": "error", "message": f"Insufficient data available for {clean_ticker} period: {period}"}
             
         total_days = len(history)
         if total_days <= 5:
@@ -123,10 +130,11 @@ def fetch_tradingview_gauge(ticker, timeframe="1d"):
         "1y": Interval.INTERVAL_1_WEEK
     }
     selected_interval = tf_mapping.get(timeframe, Interval.INTERVAL_1_DAY)
+    clean_ticker = str(ticker).upper().strip()
     
     try:
         handler = TA_Handler(
-            symbol=ticker.upper(),
+            symbol=clean_ticker,
             exchange="NSE",
             screener="india",
             interval=selected_interval
@@ -145,22 +153,49 @@ def fetch_tradingview_gauge(ticker, timeframe="1d"):
             "message": f"Failed to connect to TradingView core database: {str(e)}"
         }
 
-def fetch_historical_chart_data(ticker, period="1mo"):
+def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
     """
-    Extracts raw time-series metrics from Yahoo Finance configured 
-    specifically for native web-browser rendering lines.
+    Computes a forward-looking mathematical trajectory projection matrix 
+    derived from rolling momentum coefficients and deviation baselines.
     """
     try:
-        yf_symbol = f"{ticker.upper()}.NS"
-        yf_ticker = yf.Ticker(yf_symbol)
-        history = yf_ticker.history(period=period)
-        
-        if history.empty:
+        if not trend_data or trend_data.get("status") == "error":
             return None
             
-        chart_df = history[['Close']].copy()
-        chart_df.index = chart_df.index.strftime('%Y-%m-%d')
-        return chart_df
+        latest_close = trend_data.get("latest_close")
+        deviation_pct = trend_data.get("deviation_pct", 0)
+        momentum_str = trend_data.get("momentum", "").upper()
+        
+        # Calculate daily drift coefficient based on tracking matrix momentum
+        drift_percentage = (deviation_pct / 100) / 10.0  
+        if "BULLISH" in momentum_str:
+            drift_direction = 1.0
+            if drift_percentage <= 0: drift_percentage = 0.001
+        elif "BEARISH" in momentum_str:
+            drift_direction = -1.0
+            if drift_percentage >= 0: drift_percentage = -0.001
+        else:
+            drift_direction = 0.0
+            drift_percentage = 0.0
+            
+        projection_series = []
+        current_simulated_price = latest_close
+        
+        # Generate future business day timestamps starting tomorrow
+        future_dates = pd.date_range(start=pd.Timestamp.now() + pd.Timedelta(days=1), periods=forecast_periods, freq='B')
+        
+        for date in future_dates:
+            # Apply iterative momentum drift decay model
+            step_change = current_simulated_price * drift_percentage * drift_direction
+            current_simulated_price += step_change
+            projection_series.append({
+                "Date": date.strftime('%Y-%m-%d'),
+                "Projected Target": round(current_simulated_price, 2)
+            })
+            
+        projection_df = pd.DataFrame(projection_series)
+        projection_df.set_index("Date", inplace=True)
+        return projection_df
     except Exception as e:
-        print(f"[JARVIS SYSTEM ALARM] Historical graph tracking failure: {str(e)}")
+        print(f"[JARVIS SYSTEM ALARM] Forecast modeling projection loop error: {str(e)}")
         return None
