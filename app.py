@@ -3,7 +3,6 @@ import streamlit.components.v1 as components
 import io
 import re
 import pandas as pd  
-import speech_recognition as sr
 from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis, fetch_tradingview_gauge
 from router_agent import classify_intent, generate_financial_forecast, generate_live_price_response, get_tts_bytes, transcribe_audio_with_groq
 
@@ -195,7 +194,6 @@ for index, message in enumerate(st.session_state.messages):
         text_color = "#00E5FF" 
         
     with st.chat_message(role):
-        # Clean out raw chart string blocks before showing user text strings
         if "DATASTREAM_START" in message_payload:
             display_text = re.sub(r"DATASTREAM_START\n.*?\nDATASTREAM_END", "", message_payload, flags=re.DOTALL).strip()
         else:
@@ -203,7 +201,6 @@ for index, message in enumerate(st.session_state.messages):
             
         st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> <span style='color:#E2F1FF;'>{display_text}</span>", unsafe_allow_html=True)
         
-        # Render out charts if a valid telemetry matrix was decoded
         forecast_df = parse_llm_response_for_forecast(message_payload)
         if forecast_df is not None:
             st.markdown("### 📊 PROJECTED HORIZON DATASTREAM:")
@@ -231,22 +228,22 @@ user_text_input = st.chat_input("Input terminal override command here...")
 
 processed_prompt = None
 
-# Pipeline Phase 1: Input Audio Capture & Local STT Processing
+# Pipeline Phase 1: Input Audio Capture & Groq Cloud STT Processing Injection
 if audio_file:
-    with st.spinner("Decoding vocal sequence arrays..."):
+    with st.spinner("Decoding vocal sequence arrays via Groq Matrix..."):
         try:
             audio_bytes_raw = audio_file.read()
-            recognizer = sr.Recognizer()
-            with sr.AudioFile(io.BytesIO(audio_bytes_raw)) as source:
-                audio_data = recognizer.record(source)
-                detected_text = recognizer.recognize_google(audio_data)
+            # Wrap binary wav payload directly into structural BytesIO memory blocks for Whisper
+            audio_buffer = io.BytesIO(audio_bytes_raw)
+            detected_text = transcribe_audio_with_groq(audio_buffer)
+            
+            if detected_text:
                 processed_prompt = detected_text
+            else:
+                st.error("Signal interference detected by Groq Node. Please re-transmit.")
                 
             st.session_state.mic_rotation_counter += 1
                 
-        except sr.UnknownValueError:
-            st.error("Signal interference detected. Please repeat the command clearly.")
-            st.session_state.mic_rotation_counter += 1
         except Exception as e:
             st.error(f"Core communication breakdown: {str(e)}.")
             st.session_state.mic_rotation_counter += 1
@@ -263,7 +260,6 @@ if processed_prompt:
     
     with st.spinner("J.A.R.V.I.S. is compiling data streams..."):
         
-        # Route confirmation states safely via textual confirmation responses
         if st.session_state.get("awaiting_graph_confirmation", False):
             if "YES" in cleaned_prompt:
                 jarvis_response = (
@@ -277,7 +273,8 @@ if processed_prompt:
                 )
                 
                 news_headlines = fetch_market_news(selected_ticker)
-                tv_gauge = fetch_tradingview_gauge(selected_ticker)
+                # Correctly pulling down TradingView metrics for forecasting context
+                tv_gauge = fetch_tradingview_gauge(selected_ticker, timeframe=selected_timeframe)
                 
                 jarvis_response += generate_financial_forecast(
                     generation_prompt, 
@@ -306,6 +303,7 @@ if processed_prompt:
                     
             elif intent == "NEWS":
                 news_headlines = fetch_market_news(selected_ticker)
+                # Correctly pulling down TradingView consensus gauge values
                 tv_gauge = fetch_tradingview_gauge(selected_ticker, timeframe=selected_timeframe)
                 
                 base_forecast = generate_financial_forecast(
