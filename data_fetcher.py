@@ -197,5 +197,6 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
         projection_df.set_index("Date", inplace=True)
         return projection_df
     except Exception as e:
-        print(f"[JARVIS SYSTEM ALARM] Forecast modeling projection loop error: {str(e)}")
+        # Variable injected into systemic telemetry alert log
+        print(f"[JARVIS SYSTEM ALARM] Forecast modeling projection loop error for {ticker}: {str(e)}")
         return None
