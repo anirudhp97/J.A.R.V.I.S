@@ -132,7 +132,6 @@ def get_saved_language_from_query():
     if isinstance(lang_param, str):
         lang_param = lang_param.strip()
         if lang_param in ["English", "Kannada", "english", "kannada"]:
-            # Normalize capitalization
             return "Kannada" if lang_param.lower() == "kannada" else "English"
     return None
 
@@ -178,7 +177,6 @@ if "messages" not in st.session_state:
     if saved_history:
         st.session_state.messages = saved_history
 
-        # Restore the last known ticker only when no selection has been made yet.
         if st.session_state.active_ticker == "GOLDBEES":
             last_ticker = "GOLDBEES"
             for msg in reversed(saved_history):
@@ -207,7 +205,6 @@ if "staged_llm_text" not in st.session_state:
 # Sidebar System Controls
 st.sidebar.markdown("<h3 style='color:#b97d10; text-shadow: 0 0 5px #b97d10;'>🛡️ ARMOR DIAGNOSTICS</h3>", unsafe_allow_html=True)
 
-# 1. Multi-Language Selection Interface Widget Tracker
 lang_options = ["English", "Kannada"]
 try:
     current_lang_index = lang_options.index(st.session_state.system_language)
@@ -285,7 +282,6 @@ st.sidebar.markdown(f"""
     <span style='color: #FCE154; font-size: 10px;'>LANG MODEL: {st.session_state.system_language.upper()}</span>
 </div> """, unsafe_allow_html=True)
 
-# Purge control option
 if st.sidebar.button("💀 PURGE TERMINAL LOGS", use_container_width=True):
     st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Core memory matrix flushed, sir. Operational arrays re-initialized."}]
     if os.path.exists(".jarvis_session_history.json"):
@@ -297,7 +293,9 @@ st.sidebar.markdown("<h3 style='color:#00E5FF; text-shadow: 0 0 5px #00E5FF;'>�
 with st.sidebar.expander(f"🔮 {st.session_state.active_ticker} Core Consensus", expanded=True):
     render_tradingview_gauge_ui(st.session_state.active_ticker)
 
-# Display Chat History Flow Architecture
+# ===================================================
+# FIXED: Display Chat History Flow Architecture
+# ===================================================
 for index, message in enumerate(st.session_state.messages):
     prefix = "T. STARK [COM-LINK]:" if message["role"] == "user" else "J.A.R.V.I.S.:"
     text_color = "#FCC200" if message["role"] == "user" else "#00E5FF"
@@ -305,11 +303,10 @@ for index, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         if message["type"] == "text":
             raw_content = message.get('content', '')
-            # Unescape any stored HTML entities, then remove tags to avoid printing raw markup
-            raw_unescaped = html.unescape(str(raw_content))
-            raw_no_tags = re.sub(r'<[^>]+>', '', raw_unescaped)
-            safe_content = html.escape(raw_no_tags)
-            # Apply Kannada-capable font when Kannada glyphs are present to avoid gibberish
+            
+            # Secure user input text payload without breaking the main layout structure
+            safe_text = html.escape(str(raw_content))
+            
             if contains_kannada(raw_content):
                 content_style = "color:#E2F1FF; font-family: 'Nirmala UI', 'Noto Sans Kannada', 'Arial Unicode MS', sans-serif;"
             else:
@@ -317,13 +314,12 @@ for index, message in enumerate(st.session_state.messages):
 
             st.markdown(
                 f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> "
-                f"<span style='{content_style}'>{safe_content}</span>",
+                f"<span style='{content_style}'>{safe_text}</span>",
                 unsafe_allow_html=True
             )
             
             if message["role"] == "assistant" and (index == len(st.session_state.messages) - 1) and not st.session_state.audio_played:
                 with st.spinner("Initializing vocal transmission channels..."):
-                    # Pass chosen interface language to render specific tone arrays
                     audio_bytes = get_tts_bytes(message["content"], language=st.session_state.system_language)
                     if audio_bytes:
                         st.audio(audio_bytes, format="audio/wav", autoplay=True)
@@ -332,7 +328,6 @@ for index, message in enumerate(st.session_state.messages):
         elif message["type"] == "forecast_chart":
             st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 PROJECTED HORIZON DATASTREAM:</span>", unsafe_allow_html=True)
             
-            # Retrieve data points correctly
             forecast_data = parse_llm_response_for_forecast(message["llm_source_text"])
             if forecast_data is None:
                 forecast_data = generate_forecast_chart_data(message["ticker"], message["trend_data"], forecast_periods=5)
@@ -373,7 +368,6 @@ if audio_file:
             audio_segment.export(wav_buffer, format="wav")
             wav_buffer.seek(0)
 
-            # Forward active target language matrix to Whisper decoder
             detected_text = transcribe_audio_with_groq(wav_buffer, language=st.session_state.system_language)
             if detected_text: processed_prompt = detected_text
             st.session_state.mic_rotation_counter += 1
@@ -390,7 +384,6 @@ if processed_prompt:
     is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE", "PROJECT", "ಹೌದು", "ಮಾಡು"])
     is_negation = any(clean_prompt.startswith(word) for word in ["NO", "DON'T", "STOP", "NEVER", "SKIP", "NAH", "ಬೇಡ", "ನಿಲ್ಲಿಸು"])
     
-    # Store ticker context metadata inside user message to help state restoration during refresh
     st.session_state.messages.append({
         "role": "user", 
         "type": "text", 
