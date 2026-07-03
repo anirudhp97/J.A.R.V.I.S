@@ -3,8 +3,17 @@ import streamlit.components.v1 as components
 import io
 import re
 import pandas as pd
+import os
 from pydub import AudioSegment
-from data_fetcher import fetch_live_stock_price, fetch_market_news, fetch_gold_trend_analysis, fetch_tradingview_gauge, generate_forecast_chart_data
+from data_fetcher import (
+    fetch_live_stock_price, 
+    fetch_market_news, 
+    fetch_gold_trend_analysis, 
+    fetch_tradingview_gauge, 
+    generate_forecast_chart_data,
+    save_chat_session,
+    load_chat_session
+)
 from router_agent import classify_intent, generate_financial_forecast, generate_live_price_response, get_tts_bytes, transcribe_audio_with_groq
 
 # ===================================================
@@ -75,8 +84,7 @@ st.markdown("""
         [data-testid="stChatMessage"] div { font-family: 'Courier New', Courier, monospace !important; }
         .stCaption { color: #b97d10 !important; text-shadow: 0 0 3px rgba(185, 125, 16, 0.5); text-align: center; font-weight: bold; }
         hr { border-color: #b97d10 !important; }
-    </style>
-""", unsafe_allow_html=True)
+    </style> """, unsafe_allow_html=True)
 
 st.title("J.A.R.V.I.S.")
 st.caption("System operational. All modules online. Awaiting directives, sir.")
@@ -87,8 +95,6 @@ def render_tradingview_gauge_ui(ticker):
     and a custom container frame to match the J.A.R.V.I.S. UI.
     """
     clean_ticker = str(ticker).upper().replace(" ", "")
-    # The 'invert' filter forces the light-theme widget to appear dark.
-    # The 'hue-rotate' corrects the colors so they aren't 'negative'.
     tv_html = f"""
     <div style="
         background-color: #0b0202; 
@@ -109,8 +115,7 @@ def render_tradingview_gauge_ui(ticker):
           }}
           </script>
         </div>
-    </div>
-    """
+    </div> """
     components.html(tv_html, height=360)
 
 # Initialize Active Ticker
@@ -146,9 +151,13 @@ selected_timeframe = st.sidebar.selectbox(
     format_func=lambda x: {"5d": "Past Week [5 Days]", "1mo": "Past Month [30 Days]", "3mo": "Quarterly Trend [3M]", "1y": "Annual Trend [1Y]"}[x]
 )
 
-# Initialize Session State Machine Variables
+# Initialize Session State Machine Variables with local archival check
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
+    saved_history = load_chat_session()
+    if saved_history:
+        st.session_state.messages = saved_history
+    else:
+        st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
 if "audio_played" not in st.session_state:
     st.session_state.audio_played = False
 if "last_valid_prompt" not in st.session_state:
@@ -165,8 +174,14 @@ st.sidebar.markdown(f"""
     <span style='color: #00E5FF; font-size: 11px; font-weight: bold; letter-spacing: 1px;'>HUD CHANNEL FEED</span><br>
     <span style='color: #4AF2A1; font-size: 12px;'>● ACTIVE VECT: {st.session_state.active_ticker}</span><br>
     <span style='color: #FCE154; font-size: 10px;'>CORE STABILITY: LOCKED</span>
-</div>
-""", unsafe_allow_html=True)
+</div> """, unsafe_allow_html=True)
+
+# Purge control option
+if st.sidebar.button("💀 PURGE TERMINAL LOGS", use_container_width=True):
+    st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Core memory matrix flushed, sir. Operational arrays re-initialized."}]
+    if os.path.exists(".jarvis_session_history.json"):
+        os.remove(".jarvis_session_history.json")
+    st.rerun()
 
 st.sidebar.markdown("<h3 style='color:#00E5FF; text-shadow: 0 0 5px #00E5FF;'>📊 HUD VISUALS</h3>", unsafe_allow_html=True)
 with st.sidebar.expander(f"🔮 {st.session_state.active_ticker} Core Consensus", expanded=True):
@@ -191,10 +206,9 @@ for index, message in enumerate(st.session_state.messages):
         elif message["type"] == "forecast_chart":
             st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 PROJECTED HORIZON DATASTREAM:</span>", unsafe_allow_html=True)
             
-            # 1. Retrieve raw data
+            # Retrieve data points correctly
             forecast_data = parse_llm_response_for_forecast(message["llm_source_text"])
             if forecast_data is None:
-                # This returns an already indexed DataFrame
                 forecast_data = generate_forecast_chart_data(message["ticker"], message["trend_data"], forecast_periods=5)
                 
             if forecast_data is not None and not forecast_data.empty:
@@ -246,6 +260,7 @@ if processed_prompt:
     is_negation = any(clean_prompt.startswith(word) for word in ["NO", "DON'T", "STOP", "NEVER", "SKIP", "NAH"])
     
     st.session_state.messages.append({"role": "user", "type": "text", "content": processed_prompt})
+    save_chat_session(st.session_state.messages)
     
     if st.session_state.awaiting_graph_confirmation:
         st.session_state.awaiting_graph_confirmation = False
@@ -266,6 +281,7 @@ if processed_prompt:
         st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
         st.session_state.staged_trend_data = None
         st.session_state.staged_llm_text = None
+        save_chat_session(st.session_state.messages)
             
     else:
         if any(w in clean_prompt for w in ["GOLD BEES", "GOLDBEES", "PRICE OF GOLD"]): st.session_state.active_ticker = "GOLDBEES"
@@ -285,6 +301,7 @@ if processed_prompt:
                 else:
                     jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
                 st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
+                save_chat_session(st.session_state.messages)
                     
             elif intent == "NEWS":
                 news_headlines = fetch_market_news(target_ticker)
@@ -300,10 +317,12 @@ if processed_prompt:
                 st.session_state.staged_llm_text = base_forecast
                 st.session_state.awaiting_graph_confirmation = True
                 st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
+                save_chat_session(st.session_state.messages)
                 
             else:
                 jarvis_response = f"At your service, sir. Systems are focused on the {target_ticker} tracking array. Specify if you require real-time price monitoring or a predictive analysis block."
                 st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
+                save_chat_session(st.session_state.messages)
 
     st.session_state.audio_played = False  
     st.rerun()

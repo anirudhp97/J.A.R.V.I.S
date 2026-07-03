@@ -1,6 +1,8 @@
 import yfinance as yf
 from nsepython import nse_eq, nse_quote_ltp
 import pandas as pd
+import json
+import os
 
 try:
     from tradingview_ta import TA_Handler, Interval
@@ -178,7 +180,6 @@ def fetch_tradingview_gauge(ticker, timeframe="1d"):
 def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
     """
     Generates a momentum-based drift projection.
-    Returns a DataFrame with a DatetimeIndex for perfect Streamlit rendering.
     """
     try:
         if not trend_data or trend_data.get("status") == "error":
@@ -221,7 +222,7 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
             step_change = current_simulated_price * drift_percentage * drift_direction
             current_simulated_price += step_change
             projection_series.append({
-                "Date": date,
+                "Date": date.strftime('%Y-%m-%d'),
                 "Projected Target": round(current_simulated_price, 2)
             })
 
@@ -237,3 +238,36 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
     except Exception as e:
         print(f"Error in forecast engine for {ticker}: {str(e)}")
         return None
+
+# ===================================================
+# LOCAL ARCHIVAL SYSTEM MATRIX
+# ===================================================
+SESSION_CACHE_FILE = ".jarvis_session_history.json"
+
+def save_chat_session(messages):
+    """Saves message objects locally, omitting non-serializable objects like complex dataframes."""
+    try:
+        serializable_messages = []
+        for msg in messages:
+            clean_msg = {}
+            for k, v in msg.items():
+                if isinstance(v, pd.DataFrame):
+                    continue
+                clean_msg[k] = v
+            serializable_messages.append(clean_msg)
+            
+        with open(SESSION_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(serializable_messages, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"[SYSTEM WARN] Session storage matrix sync failure: {str(e)}")
+
+def load_chat_session():
+    """Retrieves saved local thread array back into Streamlit memory contexts."""
+    if os.path.exists(SESSION_CACHE_FILE):
+        try:
+            with open(SESSION_CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[SYSTEM ALARM] History index unreadable, resetting matrix: {str(e)}")
+            return []
+    return []
