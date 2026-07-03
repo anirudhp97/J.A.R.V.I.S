@@ -4,7 +4,11 @@ import io
 import re
 import pandas as pd
 import os
-from pydub import AudioSegment
+
+try:
+    from pydub import AudioSegment
+except ImportError:
+    AudioSegment = None
 
 from data_fetcher import (
     fetch_live_stock_price, 
@@ -165,6 +169,10 @@ if "messages" not in st.session_state:
     else:
         st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
 
+# Initialize language configuration state matrix
+if "system_language" not in st.session_state:
+    st.session_state.system_language = "English"
+
 if "audio_played" not in st.session_state:
     st.session_state.audio_played = False
 if "last_valid_prompt" not in st.session_state:
@@ -178,6 +186,13 @@ if "staged_llm_text" not in st.session_state:
 
 # Sidebar System Controls
 st.sidebar.markdown("<h3 style='color:#b97d10; text-shadow: 0 0 5px #b97d10;'>🛡️ ARMOR DIAGNOSTICS</h3>", unsafe_allow_html=True)
+
+# 1. Multi-Language Selection Interface Widget Tracker
+selected_lang = st.sidebar.selectbox(
+    "Select System Language Interface:",
+    options=["English", "Kannada"],
+    key="system_language"
+)
 
 ticker_options = ["GOLDBEES", "SILVERBEES", "NIFTYBEES"]
 try:
@@ -232,7 +247,7 @@ st.sidebar.markdown(f"""
 <div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px; margin-bottom: 15px;'>
     <span style='color: #00E5FF; font-size: 11px; font-weight: bold; letter-spacing: 1px;'>HUD CHANNEL FEED</span><br>
     <span style='color: #4AF2A1; font-size: 12px;'>● ACTIVE VECT: {st.session_state.active_ticker}</span><br>
-    <span style='color: #FCE154; font-size: 10px;'>CORE STABILITY: LOCKED</span>
+    <span style='color: #FCE154; font-size: 10px;'>LANG MODEL: {st.session_state.system_language.upper()}</span>
 </div> """, unsafe_allow_html=True)
 
 # Purge control option
@@ -258,7 +273,8 @@ for index, message in enumerate(st.session_state.messages):
             
             if message["role"] == "assistant" and (index == len(st.session_state.messages) - 1) and not st.session_state.audio_played:
                 with st.spinner("Initializing vocal transmission channels..."):
-                    audio_bytes = get_tts_bytes(message["content"])
+                    # Pass chosen interface language to render specific tone arrays
+                    audio_bytes = get_tts_bytes(message["content"], language=st.session_state.system_language)
                     if audio_bytes:
                         st.audio(audio_bytes, format="audio/wav", autoplay=True)
                         st.session_state.audio_played = True
@@ -289,7 +305,7 @@ st.divider()
 if "mic_rotation_counter" not in st.session_state:
     st.session_state.mic_rotation_counter = 0
 
-widget_key = f"voice_recorder_v_{st.session_state.mic_rotation_counter}_{st.session_state.active_ticker}"
+widget_key = f"voice_recorder_v_{st.session_state.mic_rotation_counter}_{st.session_state.active_ticker}_{st.session_state.system_language}"
 audio_file = st.audio_input("🎙️ ACTIVATE VOCAL RECEIVER", key=widget_key)
 user_text_input = st.chat_input("Input terminal override command here...")
 
@@ -298,12 +314,17 @@ processed_prompt = None
 if audio_file:
     with st.spinner("Decoding vocal sequence arrays via Groq Whisper..."):
         try:
+            if AudioSegment is None:
+                raise ImportError("pydub is not installed")
+
             audio_bytes_raw = audio_file.read()
             audio_segment = AudioSegment.from_file(io.BytesIO(audio_bytes_raw))
             wav_buffer = io.BytesIO()
             audio_segment.export(wav_buffer, format="wav")
             wav_buffer.seek(0)
-            detected_text = transcribe_audio_with_groq(wav_buffer)
+
+            # Forward active target language matrix to Whisper decoder
+            detected_text = transcribe_audio_with_groq(wav_buffer, language=st.session_state.system_language)
             if detected_text: processed_prompt = detected_text
             st.session_state.mic_rotation_counter += 1
         except Exception as e:
@@ -316,8 +337,8 @@ elif user_text_input:
 if processed_prompt:
     clean_prompt = processed_prompt.upper().strip()
     
-    is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE", "PROJECT"])
-    is_negation = any(clean_prompt.startswith(word) for word in ["NO", "DON'T", "STOP", "NEVER", "SKIP", "NAH"])
+    is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE", "PROJECT", "ಹೌದು", "ಮಾಡು"])
+    is_negation = any(clean_prompt.startswith(word) for word in ["NO", "DON'T", "STOP", "NEVER", "SKIP", "NAH", "ಬೇಡ", "ನಿಲ್ಲಿಸು"])
     
     # Store ticker context metadata inside user message to help state restoration during refresh
     st.session_state.messages.append({
@@ -338,11 +359,20 @@ if processed_prompt:
                 "trend_data": st.session_state.staged_trend_data,
                 "llm_source_text": st.session_state.staged_llm_text
             })
-            jarvis_response = f"Understood, sir. Initializing rendering sequences. Visual forecast tracks for the {st.session_state.active_ticker} vector have been securely committed to the logs above."
+            if st.session_state.system_language == "Kannada":
+                jarvis_response = f"ಅರ್ಥವಾಯಿತು ಸರ್. ರೆಂಡರಿಂಗ್ ಪ್ರಕ್ರಿಯೆ ಆರಂಭಿಸಲಾಗಿದೆ. {st.session_state.active_ticker} ಮುನ್ಸೂಚನೆ ಚಾರ್ಟ್ ಅನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಲಾಗ್ ಮಾಡಲಾಗಿದೆ."
+            else:
+                jarvis_response = f"Understood, sir. Initializing rendering sequences. Visual forecast tracks for the {st.session_state.active_ticker} vector have been securely committed to the logs above."
         elif is_negation:
-            jarvis_response = "Acknowledged, sir. Bypassing graphical predictive tracking. I shall keep a silent watch on active telemetry frequencies on standby."
+            if st.session_state.system_language == "Kannada":
+                jarvis_response = "ಖಂಡಿತ ಸರ್, ಚಾರ್ಟ್ ಪ್ರಕ್ಷೇಪಣವನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ. ನಾನು ಮುಂದಿನ ಆಜ್ಞೆಗಾಗಿ ಕಾಯುತ್ತಿದ್ದೇನೆ."
+            else:
+                jarvis_response = "Acknowledged, sir. Bypassing graphical predictive tracking. I shall keep a silent watch on active telemetry frequencies on standby."
         else:
-            jarvis_response = "Telemetry projection reset, sir. State your objective: live price tracking or trend analysis modeling."
+            if st.session_state.system_language == "Kannada":
+                jarvis_response = "ಟೆಲಿಮೆಟ್ರಿ ರಿಸೆಟ್ ಮಾಡಲಾಗಿದೆ. ಲೈವ್ ಬೆಲೆ ಅಥವಾ ಟ್ರೆಂಡ್ ವಿಶ್ಲೇಷಣೆ ಬೇಕೇ ಎಂದು ತಿಳಿಸಿ ಸರ್."
+            else:
+                jarvis_response = "Telemetry projection reset, sir. State your objective: live price tracking or trend analysis modeling."
             
         st.session_state.messages.append({
             "role": "assistant", 
@@ -355,22 +385,27 @@ if processed_prompt:
         save_chat_session(st.session_state.messages)
             
     else:
-        if any(w in clean_prompt for w in ["GOLD BEES", "GOLDBEES", "PRICE OF GOLD"]): st.session_state.active_ticker = "GOLDBEES"
-        elif any(w in clean_prompt for w in ["SILVER BEES", "SILVERBEES"]): st.session_state.active_ticker = "SILVERBEES"
-        elif any(w in clean_prompt for w in ["NIFTY BEES", "NIFTYBEES"]): st.session_state.active_ticker = "NIFTYBEES"
+        if any(w in clean_prompt for w in ["GOLD BEES", "GOLDBEES", "PRICE OF GOLD", "ಚಿನ್ನ"]): st.session_state.active_ticker = "GOLDBEES"
+        elif any(w in clean_prompt for w in ["SILVER BEES", "SILVERBEES", "ಬೆಳ್ಳಿ"]): st.session_state.active_ticker = "SILVERBEES"
+        elif any(w in clean_prompt for w in ["NIFTY BEES", "NIFTYBEES", "ನಿಫ್ಟಿ"]): st.session_state.active_ticker = "NIFTYBEES"
         
         target_ticker = st.session_state.active_ticker
         
-        with st.spinner("J.A.R.V.I.S. is compiling data streams..."):
+        with st.spinner("J.A.R.V.I.S. is compiling data streams..." if st.session_state.system_language == "English" else "ಮಾಹಿತಿಯನ್ನು ಸಂಗ್ರಹಿಸಲಾಗುತ್ತಿದೆ..."):
             intent = classify_intent(processed_prompt)
             trend_data = fetch_gold_trend_analysis(target_ticker, period=selected_timeframe)
             price_data = fetch_live_stock_price(target_ticker)
             
             if intent == "LIVE":
                 if price_data["status"] == "success":
-                    jarvis_response = generate_live_price_response(processed_prompt, price_data, trend_data)
+                    jarvis_response = generate_live_price_response(
+                        processed_prompt, price_data, trend_data, language=st.session_state.system_language
+                    )
                 else:
-                    jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
+                    if st.session_state.system_language == "Kannada":
+                        jarvis_response = f"ಸರ್, ಎಕ್ಸ್‌ಚೇಂಜ್ ಸರ್ವರ್ ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ: {price_data.get('message')}"
+                    else:
+                        jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
                 st.session_state.messages.append({
                     "role": "assistant", 
                     "type": "text", 
@@ -384,10 +419,13 @@ if processed_prompt:
                 tv_gauge = fetch_tradingview_gauge(target_ticker, timeframe=selected_timeframe)
                 
                 base_forecast = generate_financial_forecast(
-                    processed_prompt, price_data, news_headlines, trend_data, tv_gauge, ticker=target_ticker
+                    processed_prompt, price_data, news_headlines, trend_data, tv_gauge, ticker=target_ticker, language=st.session_state.system_language
                 )
                 
-                jarvis_response = base_forecast + f"\n\nShall I project the dynamic visual trend trajectory forecast chart for {target_ticker} across the upcoming trading sessions, sir?"
+                if st.session_state.system_language == "Kannada":
+                    jarvis_response = base_forecast + f"\n\nನಾನು {target_ticker} ಗಾಗಿ ಮುನ್ಸೂಚನೆ ಚಾರ್ಟ್ ಅನ್ನು ತೋರಿಸಲೇ ಸರ್?"
+                else:
+                    jarvis_response = base_forecast + f"\n\nShall I project the dynamic visual trend trajectory forecast chart for {target_ticker} across the upcoming trading sessions, sir?"
                 
                 st.session_state.staged_trend_data = trend_data
                 st.session_state.staged_llm_text = base_forecast
@@ -401,7 +439,10 @@ if processed_prompt:
                 save_chat_session(st.session_state.messages)
                 
             else:
-                jarvis_response = f"At your service, sir. Systems are focused on the {target_ticker} tracking array. Specify if you require real-time price monitoring or a predictive analysis block."
+                if st.session_state.system_language == "Kannada":
+                    jarvis_response = f"ನಿಮ್ಮ ಸೇವೆಗೆ ಸಿದ್ಧನಿದ್ದೇನೆ ಸರ್. ಸಿಸ್ಟಮ್ ಪ್ರಸ್ತುತ {target_ticker} ಮೇಲೆ ಕೇಂದ್ರೀಕೃತವಾಗಿದೆ. ಲೈವ್ ಬೆಲೆ ಅಥವಾ ಮುನ್ಸೂಚನೆ ಬೇಕೇ ಎಂದು ತಿಳಿಸಿ."
+                else:
+                    jarvis_response = f"At your service, sir. Systems are focused on the {target_ticker} tracking array. Specify if you require real-time price monitoring or a predictive analysis block."
                 st.session_state.messages.append({
                     "role": "assistant", 
                     "type": "text", 

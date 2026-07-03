@@ -1,22 +1,41 @@
 import os
 import io
 import asyncio
-import edge_tts
-from openai import OpenAI
 
-API_KEY = os.getenv("GROQ_API_KEY") 
-client = OpenAI(
-    base_url="https://api.groq.com/openai/v1",
-    api_key=API_KEY
-)
+try:
+    import edge_tts
+except ImportError:
+    edge_tts = None
 
-def transcribe_audio_with_groq(wav_io_buffer):
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
+API_KEY = os.getenv("GROQ_API_KEY")
+client = None
+if OpenAI is not None and API_KEY:
+    client = OpenAI(
+        base_url="https://api.groq.com/openai/v1",
+        api_key=API_KEY
+    )
+
+def transcribe_audio_with_groq(wav_io_buffer, language="English"):
+    if client is None:
+        return None
+
     try:
         wav_io_buffer.name = "audio.wav"
+
+        # Guide Whisper's spelling matrix based on the user's language setting
+        whisper_prompt = "GOLDBEES, SILVERBEES, NIFTYBEES, stock price, market trend"
+        if language == "Kannada":
+            whisper_prompt = "ಚಿನ್ನದ ಬೆಲೆ, ಬೆಳ್ಳಿ ಬೆಲೆ, ನಿಫ್ಟಿ, GOLDBEES, SILVERBEES, NIFTYBEES, ಮಾರ್ಕೆಟ್ ಟ್ರೆಂಡ್"
+
         transcription = client.audio.transcriptions.create(
             model="whisper-large-v3",
             file=wav_io_buffer,
-            prompt="GOLDBEES, SILVERBEES, NIFTYBEES, stock price, market trend",
+            prompt=whisper_prompt,
             temperature=0.0
         )
         return transcription.text
@@ -25,16 +44,18 @@ def transcribe_audio_with_groq(wav_io_buffer):
         return None
 
 def classify_intent(user_prompt):
+    u_prompt = user_prompt.upper()
+    forecast_tokens = ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION", "CORE CARD", "VALUE OF", "ಮುನ್ಸೂಚನೆ", "ಟ್ರೆಂಡ್"]
+    if any(token in u_prompt for token in forecast_tokens):
+        return "NEWS"
+
+    if client is None:
+        return "UNKNOWN"
+
     """
     Two-Step Verification Intent Router.
     Enhanced with fuzzy phonetic structural matching.
     """
-    u_prompt = user_prompt.upper()
-    
-    forecast_tokens = ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION", "CORE CARD", "VALUE OF"]
-    if any(token in u_prompt for token in forecast_tokens):
-        return "NEWS"
-        
     system_instruction = (
         "You are a strict financial assistant routing engine. Your absolute sole responsibility is to "
         "classify the user's intent into exactly ONE of the following uppercase words: LIVE, NEWS, or UNKNOWN.\n\n"
@@ -70,17 +91,24 @@ def classify_intent(user_prompt):
     except Exception:
         return "UNKNOWN"
 
-def generate_live_price_response(user_query, price_data, trend_data):
+def generate_live_price_response(user_query, price_data, trend_data, language="English"):
     """
     Low-latency presentation tier utilizing a smaller model to maximize speed
     when delivering real-time exchange ticker variables.
     """
+    if client is None:
+        return "Live telemetry is currently unavailable because the AI service is not configured."
     system_instruction = (
         "You are J.A.R.V.I.S., a high-performance AI assistant for Tony Stark. "
         "Your tone must be crisp, polite, futuristic, and clear. Address the user as 'sir'. "
         "Clearly provide the live exchange price details and its basic directional orientation. "
-        "Keep your output limited to 1 or 2 clear sentences maximum."
+        "Keep your output limited to 1 or 2 clear sentences maximum. "
     )
+    
+    if language == "Kannada":
+        system_instruction += "CRITICAL: You must provide your entire response in clear, fluent Kannada script."
+    else:
+        system_instruction += "Response must be in English."
     
     context = (
         f"Asset Vector Identifier: {price_data.get('ticker')}\n"
@@ -97,13 +125,16 @@ def generate_live_price_response(user_query, price_data, trend_data):
                 {"role": "user", "content": f"Context Metrics:\n{context}\n\nUser Voice Comm: {user_query}"}
             ],
             temperature=0.3,
-            max_tokens=80
+            max_tokens=150 if language == "Kannada" else 80
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Live telemetry generation bypassed: {str(e)}"
 
-def generate_financial_forecast(user_query, price_data, news_headlines, trend_data, tv_gauge, ticker="ASSET"):
+def generate_financial_forecast(user_query, price_data, news_headlines, trend_data, tv_gauge, ticker="ASSET", language="English"):
+    if client is None:
+        return "Analytical forecasting is currently unavailable because the AI service is not configured."
+
     system_instruction = (
         "You are J.A.R.V.I.S., a sophisticated, ultra-intelligent AI assistant tailored specifically for Tony Stark. "
         "Your tone must be exceptionally polite, crisp, highly analytical, authoritative, and slightly futuristic. "
@@ -114,6 +145,11 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
         "3. Do not offer bland generic trading disclosures or tell the user to consult a financial planner. Tony Stark makes his own decisions.\n"
         "4. Be specific, numbers-driven, and brief. Keep your response under 4-5 concise sentences maximum."
     )
+    
+    if language == "Kannada":
+        system_instruction += "\n5. CRITICAL: Translate and generate this full synthesis analysis purely in elegant, formal Kannada script."
+    else:
+        system_instruction += "\n5. Response must be in English."
     
     if tv_gauge and tv_gauge.get("status") == "success":
         tv_telemetry = (
@@ -140,14 +176,19 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
                 {"role": "user", "content": f"Context Metrics:\n{context}\n\nUser Predictive Request: {user_query}"}
             ],
             temperature=0.5,
-            max_tokens=300
+            max_tokens=450 if language == "Kannada" else 300
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Analytical reasoning layer timed out during cloud synthesis: {str(e)}"
 
-def get_tts_bytes(text):
-    voice_profile = "en-GB-RyanNeural"
+def get_tts_bytes(text, language="English"):
+    if edge_tts is None:
+        return None
+
+    # Dynamic toggle switches voice models between English (Ryan) and Kannada (Gagan)
+    voice_profile = "kn-IN-GaganNeural" if language == "Kannada" else "en-GB-RyanNeural"
+
     async def generate_audio():
         communicate = edge_tts.Communicate(text, voice_profile)
         audio_data = b""
