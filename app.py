@@ -208,9 +208,16 @@ if "staged_llm_text" not in st.session_state:
 st.sidebar.markdown("<h3 style='color:#b97d10; text-shadow: 0 0 5px #b97d10;'>🛡️ ARMOR DIAGNOSTICS</h3>", unsafe_allow_html=True)
 
 # 1. Multi-Language Selection Interface Widget Tracker
+lang_options = ["English", "Kannada"]
+try:
+    current_lang_index = lang_options.index(st.session_state.system_language)
+except Exception:
+    current_lang_index = 0
+
 selected_lang = st.sidebar.selectbox(
     "Select System Language Interface:",
-    options=["English", "Kannada"],
+    options=lang_options,
+    index=current_lang_index,
     key="language_select_widget"
 )
 
@@ -298,8 +305,9 @@ for index, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         if message["type"] == "text":
             raw_content = message.get('content', '')
-            # Remove any previously-saved HTML tags to avoid printing raw markup
-            raw_no_tags = re.sub(r'<[^>]+>', '', str(raw_content))
+            # Unescape any stored HTML entities, then remove tags to avoid printing raw markup
+            raw_unescaped = html.unescape(str(raw_content))
+            raw_no_tags = re.sub(r'<[^>]+>', '', raw_unescaped)
             safe_content = html.escape(raw_no_tags)
             # Apply Kannada-capable font when Kannada glyphs are present to avoid gibberish
             if contains_kannada(raw_content):
