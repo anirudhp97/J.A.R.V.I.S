@@ -125,19 +125,17 @@ if "messages" not in st.session_state:
     saved_history = load_chat_session()
     if saved_history:
         st.session_state.messages = saved_history
-        # Dynamic Ticker State Recovery Vector: Parse history to look for the last active target ticker
+        
+        # Look backwards for the last monitored or confirmed ticker in logs
         last_ticker = "GOLDBEES"
         for msg in reversed(saved_history):
-            if "ticker" in msg:
+            if "ticker" in msg and msg["ticker"]:
                 last_ticker = msg["ticker"]
                 break
         st.session_state.active_ticker = last_ticker
     else:
         st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
-
-# Fallback initialization if session wasn't loaded from history
-if "active_ticker" not in st.session_state:
-    st.session_state.active_ticker = "GOLDBEES"
+        st.session_state.active_ticker = "GOLDBEES"
 
 if "audio_played" not in st.session_state:
     st.session_state.audio_played = False
@@ -159,20 +157,18 @@ try:
 except ValueError:
     current_ticker_index = 0
 
+# Bind widget explicitly to state key tracking to block system rollback loops
 selected_ticker = st.sidebar.selectbox(
     "Select Target Core Vector:", 
     options=ticker_options, 
     index=current_ticker_index,
+    key="active_ticker",
     format_func=lambda x: {
         "GOLDBEES": "🥇 GOLD BeES Monitor", 
         "SILVERBEES": "🥈 SILVER BeES Monitor", 
         "NIFTYBEES": "📈 NIFTY BeES Index"
-    }[x]
+    }.get(x, x)
 )
-
-if selected_ticker != st.session_state.active_ticker:
-    st.session_state.active_ticker = selected_ticker
-    st.rerun()
 
 selected_timeframe = st.sidebar.selectbox(
     "Select Trajectory Horizon:", options=["5d", "1mo", "3mo", "1y"], index=1,
