@@ -121,21 +121,24 @@ def render_tradingview_gauge_ui(ticker):
     components.html(tv_html, height=360)
 
 # Initialize Session State Machine Variables with local archival check
+if "active_ticker" not in st.session_state:
+    st.session_state.active_ticker = "GOLDBEES"
+
 if "messages" not in st.session_state:
     saved_history = load_chat_session()
     if saved_history:
         st.session_state.messages = saved_history
-        
-        # Look backwards for the last monitored or confirmed ticker in logs
-        last_ticker = "GOLDBEES"
-        for msg in reversed(saved_history):
-            if "ticker" in msg and msg["ticker"]:
-                last_ticker = msg["ticker"]
-                break
-        st.session_state.active_ticker = last_ticker
+
+        # Restore the last known ticker only when no selection has been made yet.
+        if st.session_state.active_ticker == "GOLDBEES":
+            last_ticker = "GOLDBEES"
+            for msg in reversed(saved_history):
+                if "ticker" in msg and msg["ticker"]:
+                    last_ticker = msg["ticker"]
+                    break
+            st.session_state.active_ticker = last_ticker
     else:
         st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
-        st.session_state.active_ticker = "GOLDBEES"
 
 if "audio_played" not in st.session_state:
     st.session_state.audio_played = False
