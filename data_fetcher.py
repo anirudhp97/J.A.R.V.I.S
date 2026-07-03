@@ -1,8 +1,6 @@
 import yfinance as yf
 from nsepython import nse_eq, nse_quote_ltp
 import pandas as pd
-import json
-import os
 
 try:
     from tradingview_ta import TA_Handler, Interval
@@ -41,135 +39,165 @@ def fetch_live_stock_price(ticker):
         return {
             "status": "success",
             "ticker": clean_ticker,
-            "company_name": company_name,
-            "ltp": float(ltp) if ltp else None,
-            "timestamp": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
+            "company": company_name,
+            "price": ltp
         }
     except Exception as e:
-        print(f"NSE Live Price Retrieval Fault: {str(e)}")
         try:
-            yf_ticker = f"{clean_ticker}.NS"
-            stock = yf.Ticker(yf_ticker)
-            todays_data = stock.history(period='1d')
-            if not todays_data.empty:
-                ltp = todays_data['Close'].iloc[-1]
-                return {
-                    "status": "success",
-                    "ticker": clean_ticker,
-                    "company_name": asset_labels.get(clean_ticker, clean_ticker),
-                    "ltp": float(ltp),
-                    "timestamp": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
-                }
-        except Exception as ex:
-            print(f"YFinance Backup Feed Fault: {str(ex)}")
+            yf_symbol = f"{clean_ticker}.NS"
+            yf_ticker = yf.Ticker(yf_symbol)
+            live_price = yf_ticker.fast_info.last_price
             
-        return {"status": "error", "message": f"All telemetry paths severed: {str(e)}"}
+            return {
+                "status": "success",
+                "ticker": clean_ticker,
+                "company": asset_labels.get(clean_ticker, clean_ticker),
+                "price": round(live_price, 2)
+            }
+        except Exception as inner_error:
+            return {"status": "error", "message": f"All connection endpoints failed. Primary: {str(e)}. Fallback: {str(inner_error)}"}
 
 def fetch_market_news(ticker):
     """
-    Pulls structured, context-rich financial news streams for sentiment matrix injection.
+    Scrapes real-time market news summaries using Yahoo Finance vectors.
     """
-    clean_ticker = str(ticker).upper().strip()
-    yf_ticker = f"{clean_ticker}.NS"
     try:
-        stock = yf.Ticker(yf_ticker)
-        news_list = stock.news
+        clean_ticker = str(ticker).upper().strip()
+        yf_symbol = f"{clean_ticker}.NS"
+        yf_ticker = yf.Ticker(yf_symbol)
+        news_list = yf_ticker.news
+        
         if not news_list:
-            return "No localized real-time headline streams discovered inside the matrix index."
+            return f"No synchronized mainstream headlines available for {clean_ticker} vector at this period."
             
-        formatted_news = []
-        for index, item in enumerate(news_list[:4]):
-            title = item.get('title', 'Unknown Title')
-            publisher = item.get('publisher', 'Unknown Publisher')
-            formatted_news.append(f"[{index+1}] Headline: {title} | Source: {publisher}")
+        compiled_headlines = ""
+        for index, item in enumerate(news_list[:3]):
+            title = item.get('title')
+            publisher = item.get('publisher')
+            compiled_headlines += f"[{index+1}] \"{title}\" via {publisher}\n"
             
-        return "\n".join(formatted_news)
+        return compiled_headlines
     except Exception as e:
-        return f"News harvesting array failure: {str(e)}"
+        return f"News diagnostic link unresponsive: {str(e)}"
 
-def fetch_gold_trend_analysis(ticker):
+def fetch_gold_trend_analysis(ticker, period="1mo"):
     """
-    Computes true technical parameters (moving averages, momentum vector) 
-    using historical telemetry blocks.
+    Generates a trend momentum blueprint using rolling Simple Moving Averages.
     """
-    clean_ticker = str(ticker).upper().strip()
-    yf_ticker = f"{clean_ticker}.NS"
     try:
-        stock = yf.Ticker(yf_ticker)
-        df = stock.history(period="6mo")
-        if df.empty or len(df) < 50:
-            return {"status": "error", "message": "Insufficient historical data depth inside logs."}
-            
-        latest_close = df['Close'].iloc[-1]
-        sma_days = 50
-        sma_baseline = df['Close'].rolling(window=sma_days).mean().iloc[-1]
+        clean_ticker = str(ticker).upper().strip()
+        yf_symbol = f"{clean_ticker}.NS"
+        yf_ticker = yf.Ticker(yf_symbol)
+        history = yf_ticker.history(period=period)
+
+        if history.empty or len(history) < 2:
+            return {"status": "error", "message": f"Insufficient data available for {clean_ticker} period: {period}"}
+
+        history = history.copy()
+        history['Close'] = pd.to_numeric(history['Close'], errors='coerce')
+        history = history.dropna(subset=['Close'])
+
+        if history.empty:
+            return {"status": "error", "message": f"Insufficient valid price data available for {clean_ticker} period: {period}"}
+
+        total_days = len(history)
+        if total_days <= 5:
+            sma_window = 2
+        elif total_days <= 10:
+            sma_window = 5
+        else:
+            sma_window = min(20, total_days // 2)
+
+        history['Dynamic_SMA'] = history['Close'].rolling(window=sma_window).mean()
+
+        latest_close = float(history['Close'].iloc[-1])
+        sma_series = history['Dynamic_SMA'].dropna()
+        sma_value = float(sma_series.iloc[-1]) if not sma_series.empty else float(history['Close'].mean())
+        if sma_value == 0:
+            percent_deviation = 0.0
+        else:
+            percent_deviation = ((latest_close - sma_value) / sma_value) * 100
         
-        if pd.isna(sma_baseline):
-            sma_days = 20
-            sma_baseline = df['Close'].rolling(window=sma_days).mean().iloc[-1]
+        if latest_close > sma_value:
+            momentum = f"BULLISH (Trading above the trailing {sma_window}-day baseline)"
+        else:
+            momentum = f"BEARISH (Trading below the trailing {sma_window}-day baseline)"
             
-        deviation_pct = ((latest_close - sma_baseline) / sma_baseline) * 100
-        momentum = "BULLISH ACCELERATION" if deviation_pct > 0.5 else ("BEARISH DRIFT" if deviation_pct < -0.5 else "CONSOLIDATED EQUILIBRIUM")
-        
         return {
             "status": "success",
-            "ticker": clean_ticker,
-            "latest_close": round(float(latest_close), 2),
-            "sma_baseline": round(float(sma_baseline), 2),
-            "sma_days": sma_days,
-            "deviation_pct": round(float(deviation_pct), 2),
-            "momentum": momentum
+            "latest_close": round(latest_close, 2),
+            "sma_baseline": round(sma_value, 2),
+            "sma_days": sma_window,
+            "deviation_pct": round(percent_deviation, 2),
+            "momentum": momentum,
+            "lookback_period": period
         }
     except Exception as e:
-        return {"status": "error", "message": f"Trend processing array offline: {str(e)}"}
+        return {"status": "error", "message": f"Trend processing failure: {str(e)}"}
 
-def fetch_tradingview_gauge(ticker, timeframe="1D"):
+def fetch_tradingview_gauge(ticker, timeframe="1d"):
     """
-    Connects to the TradingView high-frequency technical compilation server matrix.
+    Fetches the precise consensus dashboard summary from TradingView's backend scanning arrays.
     """
-    if not TA_Handler:
-        return "TradingView library missing. Gauge tracking layer offline."
-        
-    clean_ticker = str(ticker).upper().strip()
-    intervals = {
-        "1m": Interval.INTERVAL_1_MINUTE,
-        "5m": Interval.INTERVAL_5_MINUTES,
-        "15m": Interval.INTERVAL_15_MINUTES,
-        "1h": Interval.INTERVAL_1_HOUR,
-        "4h": Interval.INTERVAL_4_HOURS,
-        "1D": Interval.INTERVAL_1_DAY,
-        "1W": Interval.INTERVAL_1_WEEK
+    if TA_Handler is None or Interval is None:
+        return {
+            "status": "error",
+            "message": "TradingView TA package is not installed."
+        }
+
+    tf_mapping = {
+        "5d": Interval.INTERVAL_1_HOUR,
+        "1mo": Interval.INTERVAL_1_DAY,
+        "3mo": Interval.INTERVAL_1_DAY,
+        "1y": Interval.INTERVAL_1_WEEK
     }
+    selected_interval = tf_mapping.get(timeframe, Interval.INTERVAL_1_DAY)
+    clean_ticker = str(ticker).upper().strip()
     
-    tv_interval = intervals.get(timeframe, Interval.INTERVAL_1_DAY)
     try:
         handler = TA_Handler(
             symbol=clean_ticker,
             exchange="NSE",
             screener="india",
-            interval=tv_interval,
-            timeout=5
+            interval=selected_interval
         )
         analysis = handler.get_analysis()
-        summary = analysis.summary
-        return (
-            f"TradingView Gauge Stream ({timeframe}): {summary.get('RECOMMENDATION')} | "
-            f"[Buy: {summary.get('BUY')}, Sell: {summary.get('SELL')}, Neutral: {summary.get('NEUTRAL')}]"
-        )
+        return {
+            "status": "success",
+            "recommendation": analysis.summary.get("RECOMMENDATION", "NEUTRAL"),
+            "buy_signals": analysis.summary.get("BUY", 0),
+            "sell_signals": analysis.summary.get("SELL", 0),
+            "neutral_signals": analysis.summary.get("NEUTRAL", 0)
+        }
     except Exception as e:
-        return f"TradingView structural telemetry unreadable on frequency {timeframe}: {str(e)}"
+        return {
+            "status": "error",
+            "message": f"Failed to connect to TradingView core database: {str(e)}"
+        }
 
 def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
     """
     Generates a momentum-based drift projection.
-    Returns a DataFrame where 'Date' is a regular string column for robust Streamlit rendering.
+    Returns a DataFrame with a DatetimeIndex for perfect Streamlit rendering.
     """
     try:
         if not trend_data or trend_data.get("status") == "error":
             return None
-            
+
         latest_close = trend_data.get("latest_close")
+        if latest_close is None:
+            return None
+        try:
+            latest_close = float(latest_close)
+        except (TypeError, ValueError):
+            return None
+        if pd.isna(latest_close):
+            return None
+
         deviation_pct = trend_data.get("deviation_pct", 0)
+        if deviation_pct is None or (isinstance(deviation_pct, float) and pd.isna(deviation_pct)):
+            deviation_pct = 0
+
         momentum_str = str(trend_data.get("momentum", "")).upper()
 
         drift_percentage = (float(deviation_pct) / 100) / 10.0
@@ -193,51 +221,19 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
             step_change = current_simulated_price * drift_percentage * drift_direction
             current_simulated_price += step_change
             projection_series.append({
-                "Date": date.strftime('%Y-%m-%d'),
+                "Date": date,
                 "Projected Target": round(current_simulated_price, 2)
             })
 
         projection_df = pd.DataFrame(projection_series)
+        projection_df.set_index("Date", inplace=True)
+        projection_df.index = pd.to_datetime(projection_df.index)
+
+        if projection_df.empty or projection_df["Projected Target"].isna().all():
+            return None
+
         return projection_df
 
     except Exception as e:
         print(f"Error in forecast engine for {ticker}: {str(e)}")
         return None
-
-# ===================================================
-# SESSION BACKUP PERSISTENCE SUBSYSTEM
-# ===================================================
-SESSION_CACHE_FILE = ".jarvis_session_history.json"
-
-def save_chat_session(messages):
-    """
-    Serializes and commits the session memory array to a hidden local file.
-    """
-    try:
-        serializable_messages = []
-        for msg in messages:
-            clean_msg = {}
-            for k, v in msg.items():
-                # Avoid trying to serialize pandas DataFrames if stored dynamically
-                if isinstance(v, pd.DataFrame):
-                    continue
-                clean_msg[k] = v
-            serializable_messages.append(clean_msg)
-            
-        with open(SESSION_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(serializable_messages, f, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print(f"[SYSTEM CRITICAL] Failed to archive timeline datastream: {str(e)}")
-
-def load_chat_session():
-    """
-    Loads and re-establishes the archived timeline datastream from file.
-    """
-    if os.path.exists(SESSION_CACHE_FILE):
-        try:
-            with open(SESSION_CACHE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"[SYSTEM WARN] Archived datastream corrupted. Initializing fresh context: {str(e)}")
-            return []
-    return []
