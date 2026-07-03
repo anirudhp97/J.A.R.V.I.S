@@ -4,6 +4,7 @@ import io
 import re
 import pandas as pd
 import os
+import html
 
 try:
     from pydub import AudioSegment
@@ -73,6 +74,13 @@ def parse_llm_response_for_forecast(llm_text_response):
         print(f"[SYSTEM ALARM] Token tracking exception parsed: {str(e)}")
         return None
 
+
+def contains_kannada(text):
+    try:
+        return bool(re.search(r'[\u0C80-\u0CFF]', str(text)))
+    except Exception:
+        return False
+
 # 1. Page Config and Advanced Mark 42 Armor Hybrid Custom CSS Style Block
 st.set_page_config(page_title="J.A.R.V.I.S. CORE HUD", layout="centered")
 
@@ -114,6 +122,18 @@ def get_saved_timeframe_from_query():
         timeframe_param = timeframe_param.strip().lower()
         if timeframe_param in ["5d", "1mo", "3mo", "1y"]:
             return timeframe_param
+    return None
+
+
+def get_saved_language_from_query():
+    lang_param = st.query_params.get("language") if hasattr(st, "query_params") else None
+    if isinstance(lang_param, (list, tuple)):
+        lang_param = lang_param[0]
+    if isinstance(lang_param, str):
+        lang_param = lang_param.strip()
+        if lang_param in ["English", "Kannada", "english", "kannada"]:
+            # Normalize capitalization
+            return "Kannada" if lang_param.lower() == "kannada" else "English"
     return None
 
 
@@ -171,7 +191,7 @@ if "messages" not in st.session_state:
 
 # Initialize language configuration state matrix
 if "system_language" not in st.session_state:
-    st.session_state.system_language = "English"
+    st.session_state.system_language = get_saved_language_from_query() or "English"
 
 if "audio_played" not in st.session_state:
     st.session_state.audio_played = False
@@ -191,8 +211,15 @@ st.sidebar.markdown("<h3 style='color:#b97d10; text-shadow: 0 0 5px #b97d10;'>ðŸ
 selected_lang = st.sidebar.selectbox(
     "Select System Language Interface:",
     options=["English", "Kannada"],
-    key="system_language"
+    key="language_select_widget"
 )
+
+if selected_lang != st.session_state.system_language:
+    st.session_state.system_language = selected_lang
+    try:
+        st.query_params["language"] = st.session_state.system_language
+    except Exception:
+        pass
 
 ticker_options = ["GOLDBEES", "SILVERBEES", "NIFTYBEES"]
 try:
@@ -240,6 +267,7 @@ if selected_timeframe != st.session_state.selected_timeframe:
 try:
     st.query_params["ticker"] = st.session_state.active_ticker
     st.query_params["timeframe"] = st.session_state.selected_timeframe
+    st.query_params["language"] = st.session_state.system_language
 except Exception:
     pass
 
@@ -269,7 +297,19 @@ for index, message in enumerate(st.session_state.messages):
     
     with st.chat_message(message["role"]):
         if message["type"] == "text":
-            st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> <span style='color:#E2F1FF;'>{message['content']}</span>", unsafe_allow_html=True)
+            raw_content = message.get('content', '')
+            safe_content = html.escape(str(raw_content))
+            # Apply Kannada-capable font when Kannada glyphs are present to avoid gibberish
+            if contains_kannada(raw_content):
+                content_style = "color:#E2F1FF; font-family: 'Nirmala UI', 'Noto Sans Kannada', 'Arial Unicode MS', sans-serif;"
+            else:
+                content_style = "color:#E2F1FF; font-family: 'Courier New', Courier, monospace;"
+
+            st.markdown(
+                f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> "
+                f"<span style='{content_style}'>{safe_content}</span>",
+                unsafe_allow_html=True
+            )
             
             if message["role"] == "assistant" and (index == len(st.session_state.messages) - 1) and not st.session_state.audio_played:
                 with st.spinner("Initializing vocal transmission channels..."):
