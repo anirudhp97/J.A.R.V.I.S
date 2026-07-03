@@ -304,17 +304,19 @@ for index, message in enumerate(st.session_state.messages):
         if message["type"] == "text":
             raw_content = message.get('content', '')
             
-            # Secure user input text payload without breaking the main layout structure
+            # Secure text content payload securely without breaking styling blocks
             safe_text = html.escape(str(raw_content))
             
+            # Formulate styles inside outer variables using double-quotes internally
             if contains_kannada(raw_content):
-                content_style = "color:#E2F1FF; font-family: 'Nirmala UI', 'Noto Sans Kannada', 'Arial Unicode MS', sans-serif;"
+                content_style = 'color: #E2F1FF; font-family: "Nirmala UI", "Noto Sans Kannada", "Arial Unicode MS", sans-serif;'
             else:
-                content_style = "color:#E2F1FF; font-family: 'Courier New', Courier, monospace;"
+                content_style = 'color: #E2F1FF; font-family: "Courier New", Courier, monospace;'
 
+            # Execute clean template using explicit double quotes for style attributes
             st.markdown(
-                f"<span style='color:{text_color}; font-weight:bold;'>{prefix}</span> "
-                f"<span style='{content_style}'>{safe_text}</span>",
+                f'<span style="color: {text_color}; font-weight: bold;">{prefix}</span> '
+                f'<span style="{content_style}">{safe_text}</span>',
                 unsafe_allow_html=True
             )
             
@@ -326,7 +328,7 @@ for index, message in enumerate(st.session_state.messages):
                         st.session_state.audio_played = True
                         
         elif message["type"] == "forecast_chart":
-            st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 PROJECTED HORIZON DATASTREAM:</span>", unsafe_allow_html=True)
+            st.markdown(f'<span style="color: {text_color}; font-weight: bold;">📊 PROJECTED HORIZON DATASTREAM:</span>', unsafe_allow_html=True)
             
             forecast_data = parse_llm_response_for_forecast(message["llm_source_text"])
             if forecast_data is None:
