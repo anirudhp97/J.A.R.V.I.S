@@ -298,7 +298,9 @@ for index, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         if message["type"] == "text":
             raw_content = message.get('content', '')
-            safe_content = html.escape(str(raw_content))
+            # Remove any previously-saved HTML tags to avoid printing raw markup
+            raw_no_tags = re.sub(r'<[^>]+>', '', str(raw_content))
+            safe_content = html.escape(raw_no_tags)
             # Apply Kannada-capable font when Kannada glyphs are present to avoid gibberish
             if contains_kannada(raw_content):
                 content_style = "color:#E2F1FF; font-family: 'Nirmala UI', 'Noto Sans Kannada', 'Arial Unicode MS', sans-serif;"
