@@ -5,6 +5,7 @@ import re
 import pandas as pd
 import os
 from pydub import AudioSegment
+
 from data_fetcher import (
     fetch_live_stock_price, 
     fetch_market_news, 
@@ -14,6 +15,7 @@ from data_fetcher import (
     save_chat_session,
     load_chat_session
 )
+
 from router_agent import classify_intent, generate_financial_forecast, generate_live_price_response, get_tts_bytes, transcribe_audio_with_groq
 
 # ===================================================
@@ -118,9 +120,35 @@ def render_tradingview_gauge_ui(ticker):
     </div> """
     components.html(tv_html, height=360)
 
-# Initialize Active Ticker
+# Initialize Session State Machine Variables with local archival check
+if "messages" not in st.session_state:
+    saved_history = load_chat_session()
+    if saved_history:
+        st.session_state.messages = saved_history
+        # Dynamic Ticker State Recovery Vector: Parse history to look for the last active target ticker
+        last_ticker = "GOLDBEES"
+        for msg in reversed(saved_history):
+            if "ticker" in msg:
+                last_ticker = msg["ticker"]
+                break
+        st.session_state.active_ticker = last_ticker
+    else:
+        st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
+
+# Fallback initialization if session wasn't loaded from history
 if "active_ticker" not in st.session_state:
     st.session_state.active_ticker = "GOLDBEES"
+
+if "audio_played" not in st.session_state:
+    st.session_state.audio_played = False
+if "last_valid_prompt" not in st.session_state:
+    st.session_state.last_valid_prompt = None
+if "awaiting_graph_confirmation" not in st.session_state:
+    st.session_state.awaiting_graph_confirmation = False
+if "staged_trend_data" not in st.session_state:
+    st.session_state.staged_trend_data = None
+if "staged_llm_text" not in st.session_state:
+    st.session_state.staged_llm_text = None
 
 # Sidebar System Controls
 st.sidebar.markdown("<h3 style='color:#b97d10; text-shadow: 0 0 5px #b97d10;'>🛡️ ARMOR DIAGNOSTICS</h3>", unsafe_allow_html=True)
@@ -151,24 +179,6 @@ selected_timeframe = st.sidebar.selectbox(
     format_func=lambda x: {"5d": "Past Week [5 Days]", "1mo": "Past Month [30 Days]", "3mo": "Quarterly Trend [3M]", "1y": "Annual Trend [1Y]"}[x]
 )
 
-# Initialize Session State Machine Variables with local archival check
-if "messages" not in st.session_state:
-    saved_history = load_chat_session()
-    if saved_history:
-        st.session_state.messages = saved_history
-    else:
-        st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Hello sir, how may I help you today? Systems are fully functional. Tap the console input below to scan market metrics or generate a tactical telemetry forecast."}]
-if "audio_played" not in st.session_state:
-    st.session_state.audio_played = False
-if "last_valid_prompt" not in st.session_state:
-    st.session_state.last_valid_prompt = None
-if "awaiting_graph_confirmation" not in st.session_state:
-    st.session_state.awaiting_graph_confirmation = False
-if "staged_trend_data" not in st.session_state:
-    st.session_state.staged_trend_data = None
-if "staged_llm_text" not in st.session_state:
-    st.session_state.staged_llm_text = None
-
 st.sidebar.markdown(f"""
 <div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px; margin-bottom: 15px;'>
     <span style='color: #00E5FF; font-size: 11px; font-weight: bold; letter-spacing: 1px;'>HUD CHANNEL FEED</span><br>
@@ -181,6 +191,7 @@ if st.sidebar.button("💀 PURGE TERMINAL LOGS", use_container_width=True):
     st.session_state.messages = [{"role": "assistant", "type": "text", "content": "Core memory matrix flushed, sir. Operational arrays re-initialized."}]
     if os.path.exists(".jarvis_session_history.json"):
         os.remove(".jarvis_session_history.json")
+    st.session_state.active_ticker = "GOLDBEES"
     st.rerun()
 
 st.sidebar.markdown("<h3 style='color:#00E5FF; text-shadow: 0 0 5px #00E5FF;'>📊 HUD VISUALS</h3>", unsafe_allow_html=True)
@@ -259,7 +270,13 @@ if processed_prompt:
     is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE", "PROJECT"])
     is_negation = any(clean_prompt.startswith(word) for word in ["NO", "DON'T", "STOP", "NEVER", "SKIP", "NAH"])
     
-    st.session_state.messages.append({"role": "user", "type": "text", "content": processed_prompt})
+    # Store ticker context metadata inside user message to help state restoration during refresh
+    st.session_state.messages.append({
+        "role": "user", 
+        "type": "text", 
+        "content": processed_prompt,
+        "ticker": st.session_state.active_ticker
+    })
     save_chat_session(st.session_state.messages)
     
     if st.session_state.awaiting_graph_confirmation:
@@ -278,7 +295,12 @@ if processed_prompt:
         else:
             jarvis_response = "Telemetry projection reset, sir. State your objective: live price tracking or trend analysis modeling."
             
-        st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "type": "text", 
+            "content": jarvis_response,
+            "ticker": st.session_state.active_ticker
+        })
         st.session_state.staged_trend_data = None
         st.session_state.staged_llm_text = None
         save_chat_session(st.session_state.messages)
@@ -300,7 +322,12 @@ if processed_prompt:
                     jarvis_response = generate_live_price_response(processed_prompt, price_data, trend_data)
                 else:
                     jarvis_response = f"Sir, I am unable to connect to the exchange floor: {price_data.get('message')}"
-                st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "type": "text", 
+                    "content": jarvis_response,
+                    "ticker": target_ticker
+                })
                 save_chat_session(st.session_state.messages)
                     
             elif intent == "NEWS":
@@ -316,12 +343,22 @@ if processed_prompt:
                 st.session_state.staged_trend_data = trend_data
                 st.session_state.staged_llm_text = base_forecast
                 st.session_state.awaiting_graph_confirmation = True
-                st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "type": "text", 
+                    "content": jarvis_response,
+                    "ticker": target_ticker
+                })
                 save_chat_session(st.session_state.messages)
                 
             else:
                 jarvis_response = f"At your service, sir. Systems are focused on the {target_ticker} tracking array. Specify if you require real-time price monitoring or a predictive analysis block."
-                st.session_state.messages.append({"role": "assistant", "type": "text", "content": jarvis_response})
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "type": "text", 
+                    "content": jarvis_response,
+                    "ticker": target_ticker
+                })
                 save_chat_session(st.session_state.messages)
 
     st.session_state.audio_played = False  
