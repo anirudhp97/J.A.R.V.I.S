@@ -91,6 +91,28 @@ st.markdown("""
 st.title("J.A.R.V.I.S.")
 st.caption("System operational. All modules online. Awaiting directives, sir.")
 
+def get_saved_ticker_from_query():
+    ticker_param = st.query_params.get("ticker") if hasattr(st, "query_params") else None
+    if isinstance(ticker_param, (list, tuple)):
+        ticker_param = ticker_param[0]
+    if isinstance(ticker_param, str):
+        ticker_param = ticker_param.strip().upper()
+        if ticker_param in ["GOLDBEES", "SILVERBEES", "NIFTYBEES"]:
+            return ticker_param
+    return None
+
+
+def get_saved_timeframe_from_query():
+    timeframe_param = st.query_params.get("timeframe") if hasattr(st, "query_params") else None
+    if isinstance(timeframe_param, (list, tuple)):
+        timeframe_param = timeframe_param[0]
+    if isinstance(timeframe_param, str):
+        timeframe_param = timeframe_param.strip().lower()
+        if timeframe_param in ["5d", "1mo", "3mo", "1y"]:
+            return timeframe_param
+    return None
+
+
 def render_tradingview_gauge_ui(ticker):
     """
     Renders the gauge using a CSS-only dark-mode filter 
@@ -122,7 +144,14 @@ def render_tradingview_gauge_ui(ticker):
 
 # Initialize Session State Machine Variables with local archival check
 if "active_ticker" not in st.session_state:
-    st.session_state.active_ticker = "GOLDBEES"
+    st.session_state.active_ticker = get_saved_ticker_from_query() or "GOLDBEES"
+elif get_saved_ticker_from_query() and get_saved_ticker_from_query() != st.session_state.active_ticker:
+    st.session_state.active_ticker = get_saved_ticker_from_query()
+
+if "selected_timeframe" not in st.session_state:
+    st.session_state.selected_timeframe = get_saved_timeframe_from_query() or "1mo"
+elif get_saved_timeframe_from_query() and get_saved_timeframe_from_query() != st.session_state.selected_timeframe:
+    st.session_state.selected_timeframe = get_saved_timeframe_from_query()
 
 if "messages" not in st.session_state:
     saved_history = load_chat_session()
@@ -173,10 +202,27 @@ selected_ticker = st.sidebar.selectbox(
     }.get(x, x)
 )
 
+try:
+    st.query_params["ticker"] = st.session_state.active_ticker
+except Exception:
+    pass
+
+timeframe_options = ["5d", "1mo", "3mo", "1y"]
+try:
+    current_timeframe_index = timeframe_options.index(st.session_state.selected_timeframe)
+except ValueError:
+    current_timeframe_index = 1
+
 selected_timeframe = st.sidebar.selectbox(
-    "Select Trajectory Horizon:", options=["5d", "1mo", "3mo", "1y"], index=1,
+    "Select Trajectory Horizon:",
+    options=timeframe_options,
+    index=current_timeframe_index,
+    key="selected_timeframe",
     format_func=lambda x: {"5d": "Past Week [5 Days]", "1mo": "Past Month [30 Days]", "3mo": "Quarterly Trend [3M]", "1y": "Annual Trend [1Y]"}[x]
 )
+
+st.query_params["ticker"] = st.session_state.active_ticker
+st.query_params["timeframe"] = st.session_state.selected_timeframe
 
 st.sidebar.markdown(f"""
 <div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px; margin-bottom: 15px;'>
