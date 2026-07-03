@@ -103,6 +103,13 @@ def generate_live_price_response(user_query, price_data, trend_data, language="E
         "Your tone must be crisp, polite, futuristic, and clear. Address the user as 'sir'. "
         "Clearly provide the live exchange price details and its basic directional orientation. "
         "Keep your output limited to 1 or 2 clear sentences maximum. "
+         "\n\n"
+        "IMPORTANT OUTPUT RULES:\n"
+        "- Respond using plain text only.\n"
+        "- Never output HTML.\n"
+        "- Never output XML.\n"
+        "- Never output Markdown formatting.\n"
+        "- Never include <span>, <div>, <br>, CSS or any tags.\n"
     )
     
     if language == "Kannada":
@@ -144,6 +151,13 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
         "2. Balance structural news narratives against the hard mathematical oscillator summary from TradingView to eliminate directional blindspots.\n"
         "3. Do not offer bland generic trading disclosures or tell the user to consult a financial planner. Tony Stark makes his own decisions.\n"
         "4. Be specific, numbers-driven, and brief. Keep your response under 4-5 concise sentences maximum."
+         "\n\n"
+        "IMPORTANT OUTPUT RULES:\n"
+        "- Respond using plain text only.\n"
+        "- Never output HTML.\n"
+        "- Never output XML.\n"
+        "- Never output Markdown formatting.\n"
+        "- Never include <span>, <div>, <br>, CSS or any tags.\n"
     )
     
     if language == "Kannada":
