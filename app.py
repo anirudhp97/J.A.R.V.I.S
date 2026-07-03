@@ -145,13 +145,9 @@ def render_tradingview_gauge_ui(ticker):
 # Initialize Session State Machine Variables with local archival check
 if "active_ticker" not in st.session_state:
     st.session_state.active_ticker = get_saved_ticker_from_query() or "GOLDBEES"
-elif get_saved_ticker_from_query() and get_saved_ticker_from_query() != st.session_state.active_ticker:
-    st.session_state.active_ticker = get_saved_ticker_from_query()
 
 if "selected_timeframe" not in st.session_state:
     st.session_state.selected_timeframe = get_saved_timeframe_from_query() or "1mo"
-elif get_saved_timeframe_from_query() and get_saved_timeframe_from_query() != st.session_state.selected_timeframe:
-    st.session_state.selected_timeframe = get_saved_timeframe_from_query()
 
 if "messages" not in st.session_state:
     saved_history = load_chat_session()
@@ -189,18 +185,20 @@ try:
 except ValueError:
     current_ticker_index = 0
 
-# Bind widget explicitly to state key tracking to block system rollback loops
 selected_ticker = st.sidebar.selectbox(
     "Select Target Core Vector:", 
     options=ticker_options, 
     index=current_ticker_index,
-    key="active_ticker",
+    key="ticker_select_widget",
     format_func=lambda x: {
         "GOLDBEES": "🥇 GOLD BeES Monitor", 
         "SILVERBEES": "🥈 SILVER BeES Monitor", 
         "NIFTYBEES": "📈 NIFTY BeES Index"
     }.get(x, x)
 )
+
+if selected_ticker != st.session_state.active_ticker:
+    st.session_state.active_ticker = selected_ticker
 
 try:
     st.query_params["ticker"] = st.session_state.active_ticker
@@ -217,12 +215,18 @@ selected_timeframe = st.sidebar.selectbox(
     "Select Trajectory Horizon:",
     options=timeframe_options,
     index=current_timeframe_index,
-    key="selected_timeframe",
+    key="timeframe_select_widget",
     format_func=lambda x: {"5d": "Past Week [5 Days]", "1mo": "Past Month [30 Days]", "3mo": "Quarterly Trend [3M]", "1y": "Annual Trend [1Y]"}[x]
 )
 
-st.query_params["ticker"] = st.session_state.active_ticker
-st.query_params["timeframe"] = st.session_state.selected_timeframe
+if selected_timeframe != st.session_state.selected_timeframe:
+    st.session_state.selected_timeframe = selected_timeframe
+
+try:
+    st.query_params["ticker"] = st.session_state.active_ticker
+    st.query_params["timeframe"] = st.session_state.selected_timeframe
+except Exception:
+    pass
 
 st.sidebar.markdown(f"""
 <div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px; margin-bottom: 15px;'>
