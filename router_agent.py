@@ -137,7 +137,9 @@ def transcribe_audio_with_groq(wav_io_buffer, language="English"):
 
 def classify_intent(user_prompt):
     u_prompt = user_prompt.upper()
-    forecast_tokens = ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION", "CORE CARD", "VALUE OF", "ಮುನ್ಸೂಚ", "ಟ್ರೆಂಡ್", "ಭವಿಷ್ಯ", "ವಿಶ್ಲೇಷ"]
+    forecast_tokens = ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION", 
+        "CORE CARD", "VALUE OF", "ಮುನ್ಸೂಚ", "ಟ್ರೆಂಡ್", "ಭವಿಷ್ಯ", "ವಿಶ್ಲೇಷ",
+        "IN DAYS", "NEXT DAYS", "DAYS", "HORIZON"]
     if any(token in u_prompt for token in forecast_tokens):
         return "NEWS"
 
