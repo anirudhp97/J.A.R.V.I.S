@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import asyncio
 
 try:
@@ -30,7 +31,44 @@ def transcribe_audio_with_groq(wav_io_buffer, language="English"):
         # Guide Whisper's spelling matrix based on the user's language setting
         whisper_prompt = "GOLDBEES, SILVERBEES, NIFTYBEES, stock price, market trend"
         if language == "Kannada":
-            whisper_prompt = "ಚಿನ್ನದ ಬೆಲೆ, ಬೆಳ್ಳಿ ಬೆಲೆ, ನಿಫ್ಟಿ, GOLDBEES, SILVERBEES, NIFTYBEES, ಮಾರ್ಕೆಟ್ ಟ್ರೆಂಡ್"
+            whisper_prompt = """
+                Financial assistant conversation in Kannada.
+
+                Possible ETF names:
+                GOLDBEES
+                SILVERBEES
+                NIFTYBEES
+                gold bees
+                goldbees
+                silver bees
+                nifty bees
+                gold ETF
+                silver ETF
+
+                Common Kannada phrases:
+                ಗೋಲ್ಡ್ಬೀಸ್
+                ಗೋಲ್ಡ್ ಬೀಸ್
+                ಸಿಲ್ವರ್ ಬೀಸ್
+                ನಿಫ್ಟಿ ಬೀಸ್
+                ಚಿನ್ನ
+                ಬೆಳ್ಳಿ
+                ಷೇರು
+                ಇಟಿಎಫ್
+                ಮಾರುಕಟ್ಟೆ
+                ಬೆಲೆ
+                ಲೈವ್ ಬೆಲೆ
+                ಇಂದಿನ ಬೆಲೆ
+                ಈಗಿನ ಬೆಲೆ
+                ಮುನ್ಸೂಚನೆ
+                ಭವಿಷ್ಯ
+                ಟ್ರೆಂಡ್
+                ವಿಶ್ಲೇಷಣೆ
+                ಖರೀದಿ
+                ಮಾರಾಟ
+                ಹೂಡಿಕೆ
+
+                This audio is about stock market, ETF prices and financial analysis.
+                """
 
         transcription = client.audio.transcriptions.create(
             model="whisper-large-v3",
@@ -45,7 +83,7 @@ def transcribe_audio_with_groq(wav_io_buffer, language="English"):
 
 def classify_intent(user_prompt):
     u_prompt = user_prompt.upper()
-    forecast_tokens = ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION", "CORE CARD", "VALUE OF", "ಮುನ್ಸೂಚನೆ", "ಟ್ರೆಂಡ್"]
+    forecast_tokens = ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION", "CORE CARD", "VALUE OF", "ಮುನ್ಸೂಚ", "ಟ್ರೆಂಡ್", "ಭವಿಷ್ಯ", "ವಿಶ್ಲೇಷ"]
     if any(token in u_prompt for token in forecast_tokens):
         return "NEWS"
 
@@ -69,12 +107,25 @@ def classify_intent(user_prompt):
         "Input: 'give me an analysis on the trend' -> Response: NEWS\n"
         "Input: 'What is the latest value' -> Response: NEWS\n"
         "Input: 'yes please' -> Response: UNKNOWN\n\n"
+        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಲೈವ್ ಬೆಲೆ' -> Response: LIVE\n\n"
+        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಈಗ ಎಷ್ಟು' -> Response: LIVE\n\n"
+        "Input: 'ಚಿನ್ನದ ETF ಬೆಲೆ' -> Response: LIVE\n\n"
+        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಟ್ರೆಂಡ್ ಹೇಗಿದೆ' -> Response: NEWS\n\n"
+        "Input: 'ಮುನ್ಸೂಚನೆ ಕೊಡು' -> Response: NEWS\n\n"
+        "Input: 'ಭವಿಷ್ಯ ಹೇಗಿರಬಹುದು' -> Response: NEWS\n\n"
+        "Input: 'ಹಾಯ್' -> Response: UNKNOWN\n\n"
+        "Input: 'ಧನ್ಯವಾದ' -> Response: UNKNOWN\n\n"
         "CRITICAL: Output ONLY the raw uppercase word: LIVE, NEWS, or UNKNOWN. Do not add punctuation."
     )
     
     try:
+        model_name = (
+            "llama-3.3-70b-versatile"
+            if re.search(r'[\u0C80-\u0CFF]', user_prompt)
+            else "llama-3.1-8b-instant"
+        )
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=model_name,
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": f"Input text to route: '{user_prompt}'"}
@@ -113,7 +164,30 @@ def generate_live_price_response(user_query, price_data, trend_data, language="E
     )
     
     if language == "Kannada":
-        system_instruction += "CRITICAL: You must provide your entire response in clear, fluent Kannada script."
+        system_instruction += """
+
+        CRITICAL:
+
+        Respond ONLY in natural conversational Kannada.
+
+        Do NOT translate English sentence-by-sentence.
+
+        Keep these words in English:
+
+        - GOLDBEES
+        - SILVERBEES
+        - NIFTYBEES
+        - ETF
+        - SMA
+        - TradingView
+        - BUY
+        - SELL
+        - NEUTRAL
+
+        Everything else should be in fluent Kannada.
+
+        Your response should sound like a native Kannada financial analyst speaking to another native Kannada speaker.
+        """
     else:
         system_instruction += "Response must be in English."
     
@@ -125,8 +199,13 @@ def generate_live_price_response(user_query, price_data, trend_data, language="E
     )
     
     try:
+        model_name = (
+            "llama-3.3-70b-versatile"
+            if language == "Kannada"
+            else "llama-3.1-8b-instant"
+            )
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant", 
+            model=model_name, 
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": f"Context Metrics:\n{context}\n\nUser Voice Comm: {user_query}"}
@@ -161,7 +240,30 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
     )
     
     if language == "Kannada":
-        system_instruction += "\n5. CRITICAL: Translate and generate this full synthesis analysis purely in elegant, formal Kannada script."
+        system_instruction += """5.
+
+            CRITICAL:
+
+            Respond ONLY in natural conversational Kannada.
+
+            Do NOT translate English sentence-by-sentence.
+
+            Keep these words in English:
+
+            - GOLDBEES
+            - SILVERBEES
+            - NIFTYBEES
+            - ETF
+            - SMA
+            - TradingView
+            - BUY
+            - SELL
+            - NEUTRAL
+
+            Everything else should be in fluent Kannada.
+
+            Your response should sound like a native Kannada financial analyst speaking to another native Kannada speaker.
+            """
     else:
         system_instruction += "\n5. Response must be in English."
     
