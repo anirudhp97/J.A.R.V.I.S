@@ -417,7 +417,7 @@ if processed_prompt:
     # 1. Broaden confirmation check to find keywords ANYWHERE in the utterance
     is_confirmation = (
         any(word in clean_prompt_upper for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE", "PROJECT"]) or
-        any(word in clean_prompt for word in ["ಹೌದು", "ಮಾಡು", "ತೋರಿಸು", "ತೋರಿಸಿ", "ಹಾಕು", "ಖಂಡಿತ", "ತ್ರಿಸೊ", "ಲಾಗಿನ್"])
+        any(word in clean_prompt for word in ["ಹೌದು", "ಮಾಡು", "ತೋರಿಸು", "ತೋರಿಸಿ", "ಹಾಕು", "ಖಂಡಿತ", "ತ್ರಿಸೊ", "ಹೂ", "ಹೂ ತೋರಿಸು"])
     )
     
     is_negation = (
