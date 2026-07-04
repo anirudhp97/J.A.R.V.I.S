@@ -476,7 +476,7 @@ if processed_prompt:
         target_ticker = st.session_state.active_ticker
         
         with st.spinner("J.A.R.V.I.S. is compiling data streams..." if st.session_state.system_language == "English" else "ಮಾಹಿತಿಯನ್ನು ಸಂಗ್ರಹಿಸಲಾಗುತ್ತಿದೆ..."):
-            intent = classify_intent(processed_prompt)
+            intent = classify_intent(processed_prompt, language=st.session_state.system_language)
             trend_data = fetch_gold_trend_analysis(target_ticker, period=selected_timeframe)
             price_data = fetch_live_stock_price(target_ticker)
             

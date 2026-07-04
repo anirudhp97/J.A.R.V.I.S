@@ -135,7 +135,7 @@ def transcribe_audio_with_groq(wav_io_buffer, language="English"):
         print(f"Groq Whisper STT Error: {str(e)}")
         return None
 
-def classify_intent(user_prompt):
+def classify_intent(user_prompt, language="English"):
     u_prompt = user_prompt.upper()
     forecast_tokens = ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION", 
         "CORE CARD", "VALUE OF", "ಮುನ್ಸೂಚ", "ಟ್ರೆಂಡ್", "ಭವಿಷ್ಯ", "ವಿಶ್ಲೇಷ",
@@ -189,7 +189,7 @@ def classify_intent(user_prompt):
     try:
         model_name = (
             "llama-3.3-70b-versatile"
-            if re.search(r'[\u0C80-\u0CFF]', user_prompt)
+            if language == "Kannada" or re.search(r'[\u0C80-\u0CFF]', user_prompt)
             else "llama-3.1-8b-instant"
         )
         response = client.chat.completions.create(
