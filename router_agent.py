@@ -28,6 +28,8 @@ def normalize_transcription(text: str) -> str:
     """
 
     clean_text = " ".join(text.split()).lower()
+    clean_text = re.sub(r"previous development in the next", "in the next", clean_text, flags=re.IGNORECASE)
+    clean_text = re.sub(r"previous development", "trend", clean_text, flags=re.IGNORECASE)
 
     replacements = {
 
@@ -45,8 +47,8 @@ def normalize_transcription(text: str) -> str:
         # ----------------------------
         # SILVERBEES
         # ----------------------------
-        r"\bsilver\s*bees\b": "SILVERBEES",
-        r"\bsilverbees\b": "SILVERBEES",
+        "silver bees": "SILVERBEES",
+        "silverbees": "SILVERBEES",
 
         "ಸಿಲ್ವರ್ ಬೀಸ್": "SILVERBEES",
         "ಸಿಲ್ವರ್ಬೀಸ್": "SILVERBEES",
@@ -55,8 +57,8 @@ def normalize_transcription(text: str) -> str:
         # ----------------------------
         # NIFTYBEES
         # ----------------------------
-        r"\bnifty\s*bees\b": "NIFTYBEES",
-        r"\bniftybees\b": "NIFTYBEES",
+        "nifty bees": "NIFTYBEES",
+        "niftybees": "NIFTYBEES",
 
         "ನಿಫ್ಟಿ ಬೀಸ್": "NIFTYBEES",
         "ನಿಫ್ಟಿಬೀಸ್": "NIFTYBEES",
