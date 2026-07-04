@@ -410,10 +410,20 @@ elif user_text_input:
 
 # Main Pipeline Execution Engine
 if processed_prompt:
-    clean_prompt = processed_prompt.upper().strip()
+    # Keep uppercase matching strictly for English checks, leave a clean variant for Kannada
+    clean_prompt = processed_prompt.strip()
+    clean_prompt_upper = clean_prompt.upper()
     
-    is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE", "PROJECT", "ಹೌದು", "ಮಾಡು"])
-    is_negation = any(clean_prompt.startswith(word) for word in ["NO", "DON'T", "STOP", "NEVER", "SKIP", "NAH", "ಬೇಡ", "ನಿಲ್ಲಿಸು"])
+    # 1. Broaden confirmation check to find keywords ANYWHERE in the utterance
+    is_confirmation = (
+        any(word in clean_prompt_upper for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE", "PROJECT"]) or
+        any(word in clean_prompt for word in ["ಹೌದು", "ಮಾಡು", "ತೋರಿಸು", "ತೋರಿಸಿ", "ಹಾಕು", "ಖಂಡಿತ", "ತ್ರಿಸೊ", "ಲಾಗಿನ್"])
+    )
+    
+    is_negation = (
+        any(word in clean_prompt_upper for word in ["NO", "DON'T", "STOP", "NEVER", "SKIP", "NAH"]) or
+        any(word in clean_prompt for word in ["ಬೇಡ", "ನಿಲ್ಲಿಸು", "ಕ್ಯಾನ್ಸಲ್"])
+    )
     
     st.session_state.messages.append({
         "role": "user", 
