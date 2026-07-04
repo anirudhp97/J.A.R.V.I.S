@@ -70,6 +70,7 @@ def normalize_transcription(text: str) -> str:
         "ಹೂ": "ಹೌದು",
         "ಹೌದು ಸರ್": "ಹೌದು",
         "How do": "ಹೌದು",
+        "How do?": "ಹೌದು",
         "huu thorisu": "ತೋರಿಸು",
         "huu": "ಹೌದು",
         "hoo thorisu": "ತೋರಿಸು",
