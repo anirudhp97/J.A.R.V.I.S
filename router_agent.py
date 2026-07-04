@@ -27,71 +27,70 @@ def normalize_transcription(text: str) -> str:
     and frequently used financial phrases.
     """
 
-    clean_text = " ".join(text.split()).lower()
-    clean_text = re.sub(r"previous development in the next", "in the next", clean_text, flags=re.IGNORECASE)
-    clean_text = re.sub(r"previous development", "trend", clean_text, flags=re.IGNORECASE)
+    if not text:
+        return ""
 
-    replacements = {
+    normalized = re.sub(r"\s+", " ", str(text)).strip()
+    normalized = re.sub(r"previous development in the next", "in the next", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"previous development", "trend", normalized, flags=re.IGNORECASE)
 
-        # ----------------------------
-        # GOLDBEES
-        # ----------------------------
-        r"\bgold\s*bees\b": "GOLDBEES",
-        r"\bgoldbees\b": "GOLDBEES",
+    replacements = [
+        (r"\bgold\s*bees\b", "GOLDBEES"),
+        (r"\bgoldbees\b", "GOLDBEES"),
+        (r"\bsilver\s*bees\b", "SILVERBEES"),
+        (r"\bsilverbees\b", "SILVERBEES"),
+        (r"\bnifty\s*bees\b", "NIFTYBEES"),
+        (r"\bniftybees\b", "NIFTYBEES"),
+        (r"(?i)ಗೋಲ್ಡ್\s*ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)" , "GOLDBEES"),
+        (r"(?i)ಸಿಲ್ವ(?:ರ್|ರ)\s*ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "SILVERBEES"),
+        (r"(?i)ನಿಫ್ಟ(?:ಿ|ಿಿ|ಿ)\s*ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "NIFTYBEES"),
+        (r"(?i)ಗೋಲ್ಡ್ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "GOLDBEES"),
+        (r"(?i)ಸಿಲ್ವ(?:ರ್|ರ)ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "SILVERBEES"),
+        (r"(?i)ನಿಫ್ಟ(?:ಿ|ಿಿ|ಿ)ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "NIFTYBEES"),
+        (r"(?i)ಗೋಲ್ಡ್\s*ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "GOLDBEES"),
+        (r"(?i)ಬೆಳ್ಳಿ", "SILVERBEES"),
+        (r"(?i)ಸಿಲ್ವರ್", "SILVERBEES"),
+        (r"(?i)ಸಿಲ್ವೆರ್", "SILVERBEES"),
+        (r"(?i)ಚಿನ್ನ", "GOLDBEES"),
+        (r"(?i)ಗೋಲ್ಡ್", "GOLDBEES"),
+        (r"(?i)ಗೋಲ್ಡ್ಬೀಸ್", "GOLDBEES"),
+        (r"(?i)ನಿಫ್ಟಿ", "NIFTYBEES"),
+        (r"(?i)ನಿಫ್ಟಿಬೀಸ್", "NIFTYBEES"),
+        (r"(?i)ನಿಫ್ಟಿ\s*ಬೀಸ್", "NIFTYBEES"),
+        (r"(?i)ತ್ರಿಸೊ", "ತೋರಿಸು"),
+        (r"(?i)ತಿರಿಸು", "ತೋರಿಸು"),
+        (r"(?i)ತೋರ್ಸಿ", "ತೋರಿಸು"),
+        (r"(?i)ಹೂ\s*ತೋರಿಸು", "ತೋರಿಸು"),
+        (r"(?i)ಹೂ", "ಹೌದು"),
+        (r"(?i)ಹೌದು\s*ಸರ್", "ಹೌದು"),
+        (r"(?i)How do\??", "ಹೌದು"),
+        (r"(?i)hodo", "ಹೌದು"),
+        (r"(?i)huu\s*thorisu", "ತೋರಿಸು"),
+        (r"(?i)huu", "ಹೌದು"),
+        (r"(?i)hoo\s*thorisu", "ತೋರಿಸು"),
+        (r"(?i)hoo", "ಹೌದು"),
+    ]
 
-        "ಗೋಲ್ಡ್ ಬೀಸ್": "GOLDBEES",
-        "ಗೋಲ್ಡ್ಬೀಸ್": "GOLDBEES",
-        "ಗೋಲ್ಡ್ೀಸ್": "GOLDBEES",
-        "ಗೋಲ್ಡ್ ಬಿಸ್": "GOLDBEES",
+    for pattern, replacement in replacements:
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
 
-        # ----------------------------
-        # SILVERBEES
-        # ----------------------------
-        "silver bees": "SILVERBEES",
-        "silverbees": "SILVERBEES",
+    return re.sub(r"\s+", " ", normalized).strip()
 
-        "ಸಿಲ್ವರ್ ಬೀಸ್": "SILVERBEES",
-        "ಸಿಲ್ವರ್ಬೀಸ್": "SILVERBEES",
-        "ಸಿಲ್ವರ್ ಬೀಸ್": "SILVERBEES",
 
-        # ----------------------------
-        # NIFTYBEES
-        # ----------------------------
-        "nifty bees": "NIFTYBEES",
-        "niftybees": "NIFTYBEES",
+def infer_ticker_from_text(text: str):
+    if not text:
+        return None
 
-        "ನಿಫ್ಟಿ ಬೀಸ್": "NIFTYBEES",
-        "ನಿಫ್ಟಿಬೀಸ್": "NIFTYBEES",
+    normalized = normalize_transcription(text)
+    haystack = f"{normalized} {normalized.upper()}"
 
-        # ----------------------------
-        # CONFIRMATION
-        # ----------------------------
-
-        "ತ್ರಿಸೊ": "ತೋರಿಸು",
-        "ತಿರಿಸು": "ತೋರಿಸು",
-        "ತೋರ್ಸಿ": "ತೋರಿಸು",
-        "ಹೂ ತೋರಿಸು": "ತೋರಿಸು",
-        "ಹೂ": "ಹೌದು",
-        "ಹೌದು ಸರ್": "ಹೌದು",
-        "How do": "ಹೌದು",
-        "How do?": "ಹೌದು",
-        "hodo":"ಹೌದು",
-        "huu thorisu": "ತೋರಿಸು",
-        "huu": "ಹೌದು",
-        "hoo thorisu": "ತೋರಿಸು",
-        "hoo": "ಹೌದು",
-    }
-
-    normalized = clean_text
-
-    for k, v in replacements.items():
-
-        if k.startswith(r"\b"):
-            normalized = re.sub(k, v, normalized, flags=re.IGNORECASE)
-        else:
-            normalized = normalized.replace(k, v)
-
-    return normalized
+    if any(token in haystack.upper() for token in ["GOLDBEES", "GOLD BEES", "ಚಿನ್ನ", "ಗೋಲ್ಡ್"]):
+        return "GOLDBEES"
+    if any(token in haystack.upper() for token in ["SILVERBEES", "SILVER BEES", "ಸಿಲ್ವರ್", "ಬೆಳ್ಳಿ"]):
+        return "SILVERBEES"
+    if any(token in haystack.upper() for token in ["NIFTYBEES", "NIFTY BEES", "ನಿಫ್ಟಿ", "NIFTY"]):
+        return "NIFTYBEES"
+    return None
 
 def transcribe_audio_with_groq(wav_io_buffer, language="English"):
     if client is None:
@@ -139,11 +138,34 @@ def transcribe_audio_with_groq(wav_io_buffer, language="English"):
         return None
 
 def classify_intent(user_prompt, language="English"):
-    u_prompt = user_prompt.upper()
-    forecast_tokens = ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION", 
+    if not user_prompt:
+        return "UNKNOWN"
+
+    normalized_prompt = normalize_transcription(str(user_prompt))
+    u_prompt = normalized_prompt.upper()
+    l_prompt = normalized_prompt.lower()
+
+    forecast_tokens = [
+        "FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION",
         "CORE CARD", "VALUE OF", "ಮುನ್ಸೂಚ", "ಟ್ರೆಂಡ್", "ಭವಿಷ್ಯ", "ವಿಶ್ಲೇಷ",
-        "IN DAYS", "NEXT DAYS", "DAYS", "HORIZON"]
+        "IN DAYS", "NEXT DAYS", "DAYS", "HORIZON", "ಹೇಗಿದೆ", "ಹೇಗಿರಬಹುದು"
+    ]
     if any(token in u_prompt for token in forecast_tokens):
+        return "NEWS"
+
+    live_keywords = [
+        "PRICE", "PRICES", "LIVE", "LTP", "CURRENT", "NOW", "RIGHT NOW", "WHAT IS", "WHAT'S",
+        "HOW MUCH", "HOW MUCH IS", "BELE", "ಬೆಲೆ", "ಎಷ್ಟು", "ಲೈವ್", "ಇದೀಗ", "ಈಗಿನ", "ಈಗ", "ಹೇಳಿ", "ತೋರಿಸ"
+    ]
+    news_keywords = [
+        "ANALYSIS", "ANALYSE", "OUTLOOK", "FORECAST", "TREND", "FUTURE", "NEWS", "PROJECTION",
+        "ಮುನ್ಸೂಚನೆ", "ವಿಶ್ಲೇಷಣೆ", "ಟ್ರೆಂಡ್", "ಭವಿಷ್ಯ", "ಹೇಗಿದೆ"
+    ]
+
+    has_asset = infer_ticker_from_text(normalized_prompt) is not None
+    if has_asset and any(token in l_prompt for token in live_keywords):
+        return "LIVE"
+    if has_asset and any(token in l_prompt for token in news_keywords):
         return "NEWS"
 
     if client is None:

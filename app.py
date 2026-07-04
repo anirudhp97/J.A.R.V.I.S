@@ -21,7 +21,14 @@ from data_fetcher import (
     load_chat_session
 )
 
-from router_agent import classify_intent, generate_financial_forecast, generate_live_price_response, get_tts_bytes, transcribe_audio_with_groq
+from router_agent import (
+    classify_intent,
+    generate_financial_forecast,
+    generate_live_price_response,
+    get_tts_bytes,
+    infer_ticker_from_text,
+    transcribe_audio_with_groq,
+)
 
 # ===================================================
 # 0. ADVANCED TEXTSTREAM PARSING MATRIX ENGINE
@@ -412,7 +419,15 @@ elif user_text_input:
 if processed_prompt:
     # Keep uppercase matching strictly for English checks, leave a clean variant for Kannada
     clean_prompt = processed_prompt.strip()
+
     clean_prompt_upper = clean_prompt.upper()
+
+    if "GOLDBEES" in clean_prompt_upper:
+        target_ticker = "GOLDBEES"
+    elif "SILVERBEES" in clean_prompt_upper:
+        target_ticker = "SILVERBEES"
+    elif "NIFTYBEES" in clean_prompt_upper:
+        target_ticker = "NIFTYBEES"
     
     # 1. Broaden confirmation check to find keywords ANYWHERE in the utterance
     is_confirmation = (
@@ -469,12 +484,30 @@ if processed_prompt:
         save_chat_session(st.session_state.messages)
             
     else:
-        if any(w in clean_prompt for w in ["GOLD BEES", "GOLDBEES", "PRICE OF GOLD", "ಚಿನ್ನ"]): st.session_state.active_ticker = "GOLDBEES"
-        elif any(w in clean_prompt for w in ["SILVER BEES", "SILVERBEES", "ಬೆಳ್ಳಿ"]): st.session_state.active_ticker = "SILVERBEES"
-        elif any(w in clean_prompt for w in ["NIFTY BEES", "NIFTYBEES", "ನಿಫ್ಟಿ"]): st.session_state.active_ticker = "NIFTYBEES"
+        # =========================================================
+        # INTEGRATED: BULLETPROOF TICKER MATCHING & FALLBACK MATRIX
+        # =========================================================
+        detected_ticker = infer_ticker_from_text(clean_prompt)
         
+        if detected_ticker:
+            st.session_state.active_ticker = detected_ticker
+        else:
+            # Force uppercase formatting on the prompt for bulletproof exact matching
+            clean_prompt_upper = clean_prompt.upper()
+            
+            if any(w in clean_prompt_upper for w in ["GOLD BEES", "GOLDBEES", "PRICE OF GOLD"]) or "ಚಿನ್ನ" in clean_prompt:
+                st.session_state.active_ticker = "GOLDBEES"
+            elif any(w in clean_prompt_upper for w in ["SILVER BEES", "SILVERBEES"]) or "ಬೆಳ್ಳಿ" in clean_prompt or "ಸಿಲ್ವರ್" in clean_prompt:
+                st.session_state.active_ticker = "SILVERBEES"
+            elif any(w in clean_prompt_upper for w in ["NIFTY BEES", "NIFTYBEES"]) or "ನಿಫ್ಟಿ" in clean_prompt:
+                st.session_state.active_ticker = "NIFTYBEES"
+        
+        # Lock in the active target tracking parameter
         target_ticker = st.session_state.active_ticker
         
+        # =========================================================
+        # CONTINUATION: DATA FEEDS AND INTENT GENERATION PIPELINE
+        # =========================================================
         with st.spinner("J.A.R.V.I.S. is compiling data streams..." if st.session_state.system_language == "English" else "ಮಾಹಿತಿಯನ್ನು ಸಂಗ್ರಹಿಸಲಾಗುತ್ತಿದೆ..."):
             intent = classify_intent(processed_prompt, language=st.session_state.system_language)
             trend_data = fetch_gold_trend_analysis(target_ticker, period=selected_timeframe)
