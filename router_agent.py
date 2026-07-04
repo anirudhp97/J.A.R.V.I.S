@@ -21,6 +21,56 @@ if OpenAI is not None and API_KEY:
         api_key=API_KEY
     )
 
+def normalize_transcription(text: str) -> str:
+    """
+    Normalize common Whisper transcription variations for ETF names
+    and frequently used financial phrases.
+    """
+
+    replacements = {
+
+        # ----------------------------
+        # GOLDBEES
+        # ----------------------------
+        r"\bgold\s*bees\b": "GOLDBEES",
+        r"\bgoldbees\b": "GOLDBEES",
+
+        "ಗೋಲ್ಡ್ ಬೀಸ್": "GOLDBEES",
+        "ಗೋಲ್ಡ್ಬೀಸ್": "GOLDBEES",
+        "ಗೋಲ್ಡ್ೀಸ್": "GOLDBEES",
+        "ಗೋಲ್ಡ್ ಬಿಸ್": "GOLDBEES",
+
+        # ----------------------------
+        # SILVERBEES
+        # ----------------------------
+        r"\bsilver\s*bees\b": "SILVERBEES",
+        r"\bsilverbees\b": "SILVERBEES",
+
+        "ಸಿಲ್ವರ್ ಬೀಸ್": "SILVERBEES",
+        "ಸಿಲ್ವರ್ಬೀಸ್": "SILVERBEES",
+        "ಸಿಲ್ವರ್ ಬೀಸ್": "SILVERBEES",
+
+        # ----------------------------
+        # NIFTYBEES
+        # ----------------------------
+        r"\bnifty\s*bees\b": "NIFTYBEES",
+        r"\bniftybees\b": "NIFTYBEES",
+
+        "ನಿಫ್ಟಿ ಬೀಸ್": "NIFTYBEES",
+        "ನಿಫ್ಟಿಬೀಸ್": "NIFTYBEES",
+    }
+
+    normalized = text
+
+    for k, v in replacements.items():
+
+        if k.startswith(r"\b"):
+            normalized = re.sub(k, v, normalized, flags=re.IGNORECASE)
+        else:
+            normalized = normalized.replace(k, v)
+
+    return normalized
+
 def transcribe_audio_with_groq(wav_io_buffer, language="English"):
     if client is None:
         return None
@@ -66,6 +116,16 @@ def transcribe_audio_with_groq(wav_io_buffer, language="English"):
                 ಖರೀದಿ
                 ಮಾರಾಟ
                 ಹೂಡಿಕೆ
+                ಈಗಿನ ಬೆಲೆ ಎಷ್ಟು
+                ಬೆಲೆ ಎಷ್ಟು
+                ಹೇಗಿದೆ
+                ಹೇಳಿ
+                ತಿಳಿಸಿ
+                ಮಾಹಿತಿ ಕೊಡಿ
+                ಮುನ್ಸೂಚನೆ ಕೊಡಿ
+                ಟ್ರೆಂಡ್ ಹೇಗಿದೆ
+                ಖರೀದಿಸಬಹುದೇ
+                ಮಾರಾಟ ಮಾಡಬಹುದೇ
 
                 This audio is about stock market, ETF prices and financial analysis.
                 """
@@ -76,7 +136,11 @@ def transcribe_audio_with_groq(wav_io_buffer, language="English"):
             prompt=whisper_prompt,
             temperature=0.0
         )
-        return transcription.text
+
+        text = transcription.text.strip()
+        text = normalize_transcription(text)
+
+        return text
     except Exception as e:
         print(f"Groq Whisper STT Error: {str(e)}")
         return None
@@ -105,14 +169,26 @@ def classify_intent(user_prompt):
         "Input: 'can you check the latest gold bees price' -> Response: LIVE\n"
         "Input: 'how much is silver bees right now' -> Response: LIVE\n"
         "Input: 'give me an analysis on the trend' -> Response: NEWS\n"
-        "Input: 'What is the latest value' -> Response: NEWS\n"
+        "Input: 'What is the latest news' -> Response: NEWS\n"
         "Input: 'yes please' -> Response: UNKNOWN\n\n"
         "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಲೈವ್ ಬೆಲೆ' -> Response: LIVE\n\n"
         "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಈಗ ಎಷ್ಟು' -> Response: LIVE\n\n"
         "Input: 'ಚಿನ್ನದ ETF ಬೆಲೆ' -> Response: LIVE\n\n"
+        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಈಗಿನ ಬೆಲೆ ಎಷ್ಟು' -> Response: LIVE\n\n"
+        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಲೈವ್ ಬೆಲೆ ಎಷ್ಟು' -> Response: LIVE\n\n"
+        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಈಗ ಎಷ್ಟು' -> Response: LIVE\n\n"
+        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಪ್ರೈಸ್ ಎಷ್ಟು' -> Response: LIVE\n\n"
+        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಬೆಲೆ ಹೇಳಿ' -> Response: LIVE\n\n"
+        "Input: 'ಸಿಲ್ವರ್ ಬೀಸ್ ಲೈವ್ ಬೆಲೆ' -> Response: LIVE\n\n"
+        "Input: 'ಸಿಲ್ವರ್ ಬೀಸ್ ಈಗಿನ ಬೆಲೆ ಎಷ್ಟು' -> Response: LIVE\n\n"
+        "Input: 'ನಿಫ್ಟಿ ಬೀಸ್ ಬೆಲೆ ಹೇಳಿ' -> Response: LIVE\n\n"
         "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಟ್ರೆಂಡ್ ಹೇಗಿದೆ' -> Response: NEWS\n\n"
         "Input: 'ಮುನ್ಸೂಚನೆ ಕೊಡು' -> Response: NEWS\n\n"
         "Input: 'ಭವಿಷ್ಯ ಹೇಗಿರಬಹುದು' -> Response: NEWS\n\n"
+        "Input: 'ಸಿಲ್ವರ್ ಬೀಸ್ ಟ್ರೆಂಡ್ ಹೇಗಿದೆ' -> Response: NEWS\n\n"
+        "Input: 'ನಿಫ್ಟಿ ಬೀಸ್ ಭವಿಷ್ಯ ಹೇಗಿದೆ' -> Response: NEWS\n\n"
+        "Input: 'ಸಿಲ್ವರ್ ಬೀಸ್ ಮುನ್ಸೂಚನೆ' -> Response: NEWS\n\n"
+        "Input: 'NIFTYBEES forecast' -> Response: NEWS\n\n"
         "Input: 'ಹಾಯ್' -> Response: UNKNOWN\n\n"
         "Input: 'ಧನ್ಯವಾದ' -> Response: UNKNOWN\n\n"
         "CRITICAL: Output ONLY the raw uppercase word: LIVE, NEWS, or UNKNOWN. Do not add punctuation."
