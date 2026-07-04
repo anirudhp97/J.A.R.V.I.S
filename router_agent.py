@@ -82,52 +82,20 @@ def transcribe_audio_with_groq(wav_io_buffer, language="English"):
         whisper_prompt = "GOLDBEES, SILVERBEES, NIFTYBEES, stock price, market trend"
         if language == "Kannada":
             whisper_prompt = """
-                Financial assistant conversation in Kannada.
+                Financial assistant.
+                Topics: ETFs and stock market.
 
-                Possible ETF names:
                 GOLDBEES
                 SILVERBEES
                 NIFTYBEES
-                gold bees
-                goldbees
-                silver bees
-                nifty bees
-                gold ETF
-                silver ETF
 
-                Common Kannada phrases:
                 ಗೋಲ್ಡ್ಬೀಸ್
-                ಗೋಲ್ಡ್ ಬೀಸ್
                 ಸಿಲ್ವರ್ ಬೀಸ್
                 ನಿಫ್ಟಿ ಬೀಸ್
-                ಚಿನ್ನ
-                ಬೆಳ್ಳಿ
-                ಷೇರು
-                ಇಟಿಎಫ್
-                ಮಾರುಕಟ್ಟೆ
-                ಬೆಲೆ
-                ಲೈವ್ ಬೆಲೆ
-                ಇಂದಿನ ಬೆಲೆ
-                ಈಗಿನ ಬೆಲೆ
-                ಮುನ್ಸೂಚನೆ
-                ಭವಿಷ್ಯ
-                ಟ್ರೆಂಡ್
-                ವಿಶ್ಲೇಷಣೆ
-                ಖರೀದಿ
-                ಮಾರಾಟ
-                ಹೂಡಿಕೆ
-                ಈಗಿನ ಬೆಲೆ ಎಷ್ಟು
-                ಬೆಲೆ ಎಷ್ಟು
-                ಹೇಗಿದೆ
-                ಹೇಳಿ
-                ತಿಳಿಸಿ
-                ಮಾಹಿತಿ ಕೊಡಿ
-                ಮುನ್ಸೂಚನೆ ಕೊಡಿ
-                ಟ್ರೆಂಡ್ ಹೇಗಿದೆ
-                ಖರೀದಿಸಬಹುದೇ
-                ಮಾರಾಟ ಮಾಡಬಹುದೇ
 
-                This audio is about stock market, ETF prices and financial analysis.
+                ಬೆಲೆ
+                ಟ್ರೆಂಡ್
+                ಮುನ್ಸೂಚನೆ
                 """
 
         transcription = client.audio.transcriptions.create(
