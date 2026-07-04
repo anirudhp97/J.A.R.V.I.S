@@ -27,6 +27,8 @@ def normalize_transcription(text: str) -> str:
     and frequently used financial phrases.
     """
 
+    clean_text = " ".join(text.split()).lower()
+
     replacements = {
 
         # ----------------------------
@@ -77,7 +79,7 @@ def normalize_transcription(text: str) -> str:
         "hoo": "ಹೌದು",
     }
 
-    normalized = text
+    normalized = clean_text
 
     for k, v in replacements.items():
 
@@ -94,6 +96,8 @@ def transcribe_audio_with_groq(wav_io_buffer, language="English"):
 
     try:
         wav_io_buffer.name = "audio.wav"
+
+        whisper_lang_code = "kn" if language == "Kannada" else "en"
 
         # Guide Whisper's spelling matrix based on the user's language setting
         whisper_prompt = "GOLDBEES, SILVERBEES, NIFTYBEES, stock price, market trend"
@@ -119,6 +123,7 @@ def transcribe_audio_with_groq(wav_io_buffer, language="English"):
             model="whisper-large-v3",
             file=wav_io_buffer,
             prompt=whisper_prompt,
+            language=whisper_lang_code,
             temperature=0.0
         )
 
