@@ -1,180 +1,40 @@
 import os
 import io
-import re
 import asyncio
+import edge_tts
+from openai import OpenAI
 
-try:
-    import edge_tts
-except ImportError:
-    edge_tts = None
+API_KEY = os.getenv("GROQ_API_KEY") 
+client = OpenAI(
+    base_url="https://api.groq.com/openai/v1",
+    api_key=API_KEY
+)
 
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
-
-API_KEY = os.getenv("GROQ_API_KEY")
-client = None
-if OpenAI is not None and API_KEY:
-    client = OpenAI(
-        base_url="https://api.groq.com/openai/v1",
-        api_key=API_KEY
-    )
-
-def normalize_transcription(text: str) -> str:
-    """
-    Normalize common Whisper transcription variations for ETF names
-    and frequently used financial phrases.
-    """
-
-    if not text:
-        return ""
-
-    normalized = re.sub(r"\s+", " ", str(text)).strip()
-    normalized = re.sub(r"previous development in the next", "in the next", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"previous development", "trend", normalized, flags=re.IGNORECASE)
-
-    replacements = [
-        (r"\bgold\s*bees\b", "GOLDBEES"),
-        (r"\bgoldbees\b", "GOLDBEES"),
-        (r"\bsilver\s*bees\b", "SILVERBEES"),
-        (r"\bsilverbees\b", "SILVERBEES"),
-        (r"\bnifty\s*bees\b", "NIFTYBEES"),
-        (r"\bniftybees\b", "NIFTYBEES"),
-        (r"(?i)ಗೋಲ್ಡ್\s*ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)" , "GOLDBEES"),
-        (r"(?i)ಸಿಲ್ವ(?:ರ್|ರ)\s*ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "SILVERBEES"),
-        (r"(?i)ನಿಫ್ಟ(?:ಿ|ಿಿ|ಿ)\s*ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "NIFTYBEES"),
-        (r"(?i)ಗೋಲ್ಡ್ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "GOLDBEES"),
-        (r"(?i)ಸಿಲ್ವ(?:ರ್|ರ)ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "SILVERBEES"),
-        (r"(?i)ನಿಫ್ಟ(?:ಿ|ಿಿ|ಿ)ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "NIFTYBEES"),
-        (r"(?i)ಗೋಲ್ಡ್\s*ಬ(?:ಿ|ೀ|ಿಿ|ೀಸ|ಿಸ್|ಿಸ್ಸು|ಿಸ್)", "GOLDBEES"),
-        (r"(?i)ಬೆಳ್ಳಿ", "SILVERBEES"),
-        (r"(?i)ಸಿಲ್ವರ್", "SILVERBEES"),
-        (r"(?i)ಸಿಲ್ವೆರ್", "SILVERBEES"),
-        (r"(?i)ಚಿನ್ನ", "GOLDBEES"),
-        (r"(?i)ಗೋಲ್ಡ್", "GOLDBEES"),
-        (r"(?i)ಗೋಲ್ಡ್ಬೀಸ್", "GOLDBEES"),
-        (r"(?i)ನಿಫ್ಟಿ", "NIFTYBEES"),
-        (r"(?i)ನಿಫ್ಟಿಬೀಸ್", "NIFTYBEES"),
-        (r"(?i)ನಿಫ್ಟಿ\s*ಬೀಸ್", "NIFTYBEES"),
-        (r"(?i)ತ್ರಿಸೊ", "ತೋರಿಸು"),
-        (r"(?i)ತಿರಿಸು", "ತೋರಿಸು"),
-        (r"(?i)ತೋರ್ಸಿ", "ತೋರಿಸು"),
-        (r"(?i)ಹೂ\s*ತೋರಿಸು", "ತೋರಿಸು"),
-        (r"(?i)ಹೂ", "ಹೌದು"),
-        (r"(?i)ಹೌದು\s*ಸರ್", "ಹೌದು"),
-        (r"(?i)How do\??", "ಹೌದು"),
-        (r"(?i)hodo", "ಹೌದು"),
-        (r"(?i)huu\s*thorisu", "ತೋರಿಸು"),
-        (r"(?i)huu", "ಹೌದು"),
-        (r"(?i)hoo\s*thorisu", "ತೋರಿಸು"),
-        (r"(?i)hoo", "ಹೌದು"),
-    ]
-
-    for pattern, replacement in replacements:
-        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
-
-    return re.sub(r"\s+", " ", normalized).strip()
-
-
-def infer_ticker_from_text(text: str):
-    if not text:
-        return None
-
-    normalized = normalize_transcription(text)
-    haystack = f"{normalized} {normalized.upper()}"
-
-    if any(token in haystack.upper() for token in ["GOLDBEES", "GOLD BEES", "ಚಿನ್ನ", "ಗೋಲ್ಡ್"]):
-        return "GOLDBEES"
-    if any(token in haystack.upper() for token in ["SILVERBEES", "SILVER BEES", "ಸಿಲ್ವರ್", "ಬೆಳ್ಳಿ"]):
-        return "SILVERBEES"
-    if any(token in haystack.upper() for token in ["NIFTYBEES", "NIFTY BEES", "ನಿಫ್ಟಿ", "NIFTY"]):
-        return "NIFTYBEES"
-    return None
-
-def transcribe_audio_with_groq(wav_io_buffer, language="English"):
-    if client is None:
-        return None
-
+def transcribe_audio_with_groq(wav_io_buffer):
     try:
         wav_io_buffer.name = "audio.wav"
-
-        whisper_lang_code = "kn" if language == "Kannada" else "en"
-
-        # Guide Whisper's spelling matrix based on the user's language setting
-        whisper_prompt = "GOLDBEES, SILVERBEES, NIFTYBEES, stock price, market trend"
-        if language == "Kannada":
-            whisper_prompt = """
-                Financial assistant.
-                Topics: ETFs and stock market.
-
-                GOLDBEES
-                SILVERBEES
-                NIFTYBEES
-
-                ಗೋಲ್ಡ್ಬೀಸ್
-                ಸಿಲ್ವರ್ ಬೀಸ್
-                ನಿಫ್ಟಿ ಬೀಸ್
-
-                ಬೆಲೆ
-                ಟ್ರೆಂಡ್
-                ಮುನ್ಸೂಚನೆ
-                """
-
         transcription = client.audio.transcriptions.create(
             model="whisper-large-v3",
             file=wav_io_buffer,
-            prompt=whisper_prompt,
-            language=whisper_lang_code,
+            prompt="GOLDBEES, SILVERBEES, NIFTYBEES, stock price, market trend",
             temperature=0.0
         )
-
-        text = transcription.text.strip()
-        text = normalize_transcription(text)
-
-        return text
+        return transcription.text
     except Exception as e:
         print(f"Groq Whisper STT Error: {str(e)}")
         return None
 
-def classify_intent(user_prompt, language="English"):
-    if not user_prompt:
-        return "UNKNOWN"
-
-    normalized_prompt = normalize_transcription(str(user_prompt))
-    u_prompt = normalized_prompt.upper()
-    l_prompt = normalized_prompt.lower()
-
-    forecast_tokens = [
-        "FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION",
-        "CORE CARD", "VALUE OF", "ಮುನ್ಸೂಚ", "ಟ್ರೆಂಡ್", "ಭವಿಷ್ಯ", "ವಿಶ್ಲೇಷ",
-        "IN DAYS", "NEXT DAYS", "DAYS", "HORIZON", "ಹೇಗಿದೆ", "ಹೇಗಿರಬಹುದು"
-    ]
-    if any(token in u_prompt for token in forecast_tokens):
-        return "NEWS"
-
-    live_keywords = [
-        "PRICE", "PRICES", "LIVE", "LTP", "CURRENT", "NOW", "RIGHT NOW", "WHAT IS", "WHAT'S",
-        "HOW MUCH", "HOW MUCH IS", "BELE", "ಬೆಲೆ", "ಎಷ್ಟು", "ಲೈವ್", "ಇದೀಗ", "ಈಗಿನ", "ಈಗ", "ಹೇಳಿ", "ತೋರಿಸ"
-    ]
-    news_keywords = [
-        "ANALYSIS", "ANALYSE", "OUTLOOK", "FORECAST", "TREND", "FUTURE", "NEWS", "PROJECTION",
-        "ಮುನ್ಸೂಚನೆ", "ವಿಶ್ಲೇಷಣೆ", "ಟ್ರೆಂಡ್", "ಭವಿಷ್ಯ", "ಹೇಗಿದೆ"
-    ]
-
-    has_asset = infer_ticker_from_text(normalized_prompt) is not None
-    if has_asset and any(token in l_prompt for token in live_keywords):
-        return "LIVE"
-    if has_asset and any(token in l_prompt for token in news_keywords):
-        return "NEWS"
-
-    if client is None:
-        return "UNKNOWN"
-
+def classify_intent(user_prompt):
     """
     Two-Step Verification Intent Router.
     Enhanced with fuzzy phonetic structural matching.
     """
+    u_prompt = user_prompt.upper()
+    
+    forecast_tokens = ["FORECAST", "TREND", "FUTURE", "PREDICT", "OUTLOOK", "PROJECTION", "CORE CARD", "VALUE OF"]
+    if any(token in u_prompt for token in forecast_tokens):
+        return "NEWS"
+        
     system_instruction = (
         "You are a strict financial assistant routing engine. Your absolute sole responsibility is to "
         "classify the user's intent into exactly ONE of the following uppercase words: LIVE, NEWS, or UNKNOWN.\n\n"
@@ -186,39 +46,14 @@ def classify_intent(user_prompt, language="English"):
         "Input: 'can you check the latest gold bees price' -> Response: LIVE\n"
         "Input: 'how much is silver bees right now' -> Response: LIVE\n"
         "Input: 'give me an analysis on the trend' -> Response: NEWS\n"
-        "Input: 'What is the latest news' -> Response: NEWS\n"
+        "Input: 'What is the latest value' -> Response: NEWS\n"
         "Input: 'yes please' -> Response: UNKNOWN\n\n"
-        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಲೈವ್ ಬೆಲೆ' -> Response: LIVE\n\n"
-        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಈಗ ಎಷ್ಟು' -> Response: LIVE\n\n"
-        "Input: 'ಚಿನ್ನದ ETF ಬೆಲೆ' -> Response: LIVE\n\n"
-        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಈಗಿನ ಬೆಲೆ ಎಷ್ಟು' -> Response: LIVE\n\n"
-        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಲೈವ್ ಬೆಲೆ ಎಷ್ಟು' -> Response: LIVE\n\n"
-        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಈಗ ಎಷ್ಟು' -> Response: LIVE\n\n"
-        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಪ್ರೈಸ್ ಎಷ್ಟು' -> Response: LIVE\n\n"
-        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಬೆಲೆ ಹೇಳಿ' -> Response: LIVE\n\n"
-        "Input: 'ಸಿಲ್ವರ್ ಬೀಸ್ ಲೈವ್ ಬೆಲೆ' -> Response: LIVE\n\n"
-        "Input: 'ಸಿಲ್ವರ್ ಬೀಸ್ ಈಗಿನ ಬೆಲೆ ಎಷ್ಟು' -> Response: LIVE\n\n"
-        "Input: 'ನಿಫ್ಟಿ ಬೀಸ್ ಬೆಲೆ ಹೇಳಿ' -> Response: LIVE\n\n"
-        "Input: 'ಗೋಲ್ಡ್ಬೀಸ್ ಟ್ರೆಂಡ್ ಹೇಗಿದೆ' -> Response: NEWS\n\n"
-        "Input: 'ಮುನ್ಸೂಚನೆ ಕೊಡು' -> Response: NEWS\n\n"
-        "Input: 'ಭವಿಷ್ಯ ಹೇಗಿರಬಹುದು' -> Response: NEWS\n\n"
-        "Input: 'ಸಿಲ್ವರ್ ಬೀಸ್ ಟ್ರೆಂಡ್ ಹೇಗಿದೆ' -> Response: NEWS\n\n"
-        "Input: 'ನಿಫ್ಟಿ ಬೀಸ್ ಭವಿಷ್ಯ ಹೇಗಿದೆ' -> Response: NEWS\n\n"
-        "Input: 'ಸಿಲ್ವರ್ ಬೀಸ್ ಮುನ್ಸೂಚನೆ' -> Response: NEWS\n\n"
-        "Input: 'NIFTYBEES forecast' -> Response: NEWS\n\n"
-        "Input: 'ಹಾಯ್' -> Response: UNKNOWN\n\n"
-        "Input: 'ಧನ್ಯವಾದ' -> Response: UNKNOWN\n\n"
         "CRITICAL: Output ONLY the raw uppercase word: LIVE, NEWS, or UNKNOWN. Do not add punctuation."
     )
     
     try:
-        model_name = (
-            "llama-3.3-70b-versatile"
-            if language == "Kannada" or re.search(r'[\u0C80-\u0CFF]', user_prompt)
-            else "llama-3.1-8b-instant"
-        )
         response = client.chat.completions.create(
-            model=model_name,
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": f"Input text to route: '{user_prompt}'"}
@@ -235,54 +70,17 @@ def classify_intent(user_prompt, language="English"):
     except Exception:
         return "UNKNOWN"
 
-def generate_live_price_response(user_query, price_data, trend_data, language="English"):
+def generate_live_price_response(user_query, price_data, trend_data):
     """
     Low-latency presentation tier utilizing a smaller model to maximize speed
     when delivering real-time exchange ticker variables.
     """
-    if client is None:
-        return "Live telemetry is currently unavailable because the AI service is not configured."
     system_instruction = (
         "You are J.A.R.V.I.S., a high-performance AI assistant for Tony Stark. "
         "Your tone must be crisp, polite, futuristic, and clear. Address the user as 'sir'. "
         "Clearly provide the live exchange price details and its basic directional orientation. "
-        "Keep your output limited to 1 or 2 clear sentences maximum. "
-         "\n\n"
-        "IMPORTANT OUTPUT RULES:\n"
-        "- Respond using plain text only.\n"
-        "- Never output HTML.\n"
-        "- Never output XML.\n"
-        "- Never output Markdown formatting.\n"
-        "- Never include <span>, <div>, <br>, CSS or any tags.\n"
+        "Keep your output limited to 1 or 2 clear sentences maximum."
     )
-    
-    if language == "Kannada":
-        system_instruction += """
-
-        CRITICAL:
-
-        Respond ONLY in natural conversational Kannada.
-
-        Do NOT translate English sentence-by-sentence.
-
-        Keep these words in English:
-
-        - GOLDBEES
-        - SILVERBEES
-        - NIFTYBEES
-        - ETF
-        - SMA
-        - TradingView
-        - BUY
-        - SELL
-        - NEUTRAL
-
-        Everything else should be in fluent Kannada.
-
-        Your response should sound like a native Kannada financial analyst speaking to another native Kannada speaker.
-        """
-    else:
-        system_instruction += "Response must be in English."
     
     context = (
         f"Asset Vector Identifier: {price_data.get('ticker')}\n"
@@ -292,28 +90,20 @@ def generate_live_price_response(user_query, price_data, trend_data, language="E
     )
     
     try:
-        model_name = (
-            "llama-3.3-70b-versatile"
-            if language == "Kannada"
-            else "llama-3.1-8b-instant"
-            )
         response = client.chat.completions.create(
-            model=model_name, 
+            model="llama-3.1-8b-instant", 
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": f"Context Metrics:\n{context}\n\nUser Voice Comm: {user_query}"}
             ],
             temperature=0.3,
-            max_tokens=150 if language == "Kannada" else 80
+            max_tokens=80
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Live telemetry generation bypassed: {str(e)}"
 
-def generate_financial_forecast(user_query, price_data, news_headlines, trend_data, tv_gauge, ticker="ASSET", language="English"):
-    if client is None:
-        return "Analytical forecasting is currently unavailable because the AI service is not configured."
-
+def generate_financial_forecast(user_query, price_data, news_headlines, trend_data, tv_gauge, ticker="ASSET"):
     system_instruction = (
         "You are J.A.R.V.I.S., a sophisticated, ultra-intelligent AI assistant tailored specifically for Tony Stark. "
         "Your tone must be exceptionally polite, crisp, highly analytical, authoritative, and slightly futuristic. "
@@ -323,42 +113,7 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
         "2. Balance structural news narratives against the hard mathematical oscillator summary from TradingView to eliminate directional blindspots.\n"
         "3. Do not offer bland generic trading disclosures or tell the user to consult a financial planner. Tony Stark makes his own decisions.\n"
         "4. Be specific, numbers-driven, and brief. Keep your response under 4-5 concise sentences maximum."
-         "\n\n"
-        "IMPORTANT OUTPUT RULES:\n"
-        "- Respond using plain text only.\n"
-        "- Never output HTML.\n"
-        "- Never output XML.\n"
-        "- Never output Markdown formatting.\n"
-        "- Never include <span>, <div>, <br>, CSS or any tags.\n"
     )
-    
-    if language == "Kannada":
-        system_instruction += """5.
-
-            CRITICAL:
-
-            Respond ONLY in natural conversational Kannada.
-
-            Do NOT translate English sentence-by-sentence.
-
-            Keep these words in English:
-
-            - GOLDBEES
-            - SILVERBEES
-            - NIFTYBEES
-            - ETF
-            - SMA
-            - TradingView
-            - BUY
-            - SELL
-            - NEUTRAL
-
-            Everything else should be in fluent Kannada.
-
-            Your response should sound like a native Kannada financial analyst speaking to another native Kannada speaker.
-            """
-    else:
-        system_instruction += "\n5. Response must be in English."
     
     if tv_gauge and tv_gauge.get("status") == "success":
         tv_telemetry = (
@@ -385,19 +140,14 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
                 {"role": "user", "content": f"Context Metrics:\n{context}\n\nUser Predictive Request: {user_query}"}
             ],
             temperature=0.5,
-            max_tokens=450 if language == "Kannada" else 300
+            max_tokens=300
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Analytical reasoning layer timed out during cloud synthesis: {str(e)}"
 
-def get_tts_bytes(text, language="English"):
-    if edge_tts is None:
-        return None
-
-    # Dynamic toggle switches voice models between English (Ryan) and Kannada (Gagan)
-    voice_profile = "kn-IN-GaganNeural" if language == "Kannada" else "en-GB-RyanNeural"
-
+def get_tts_bytes(text):
+    voice_profile = "en-GB-RyanNeural"
     async def generate_audio():
         communicate = edge_tts.Communicate(text, voice_profile)
         audio_data = b""
