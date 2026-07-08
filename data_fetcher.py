@@ -177,31 +177,47 @@ def fetch_tradingview_gauge(ticker, timeframe="1d"):
             "message": f"Failed to connect to TradingView core database: {str(e)}"
         }
 
-def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
+def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5, fallback_price=None):
     """
-    Generates a momentum-based drift projection.
+    Generates a momentum-based drift projection using a live-price fallback when
+    trend data is unavailable or partially corrupted.
     """
     try:
-        if not trend_data or trend_data.get("status") == "error":
-            return None
+        latest_close = None
+        deviation_pct = 0.0
+        momentum_str = ""
 
-        latest_close = trend_data.get("latest_close")
+        if isinstance(trend_data, dict):
+            if trend_data.get("status") == "error":
+                latest_close = fallback_price
+            else:
+                latest_close = trend_data.get("latest_close")
+                deviation_pct = trend_data.get("deviation_pct", 0)
+                momentum_str = str(trend_data.get("momentum", "")).upper()
+
+        if latest_close is None:
+            latest_close = fallback_price
+
         if latest_close is None:
             return None
+
         try:
             latest_close = float(latest_close)
         except (TypeError, ValueError):
             return None
+
         if pd.isna(latest_close):
             return None
 
-        deviation_pct = trend_data.get("deviation_pct", 0)
-        if deviation_pct is None or (isinstance(deviation_pct, float) and pd.isna(deviation_pct)):
-            deviation_pct = 0
+        try:
+            deviation_pct = float(deviation_pct)
+        except (TypeError, ValueError):
+            deviation_pct = 0.0
 
-        momentum_str = str(trend_data.get("momentum", "")).upper()
+        if deviation_pct is None or pd.isna(deviation_pct):
+            deviation_pct = 0.0
 
-        drift_percentage = (float(deviation_pct) / 100) / 10.0
+        drift_percentage = (deviation_pct / 100) / 10.0
         if "BULLISH" in momentum_str:
             drift_direction = 1.0
             if drift_percentage <= 0:
@@ -214,24 +230,28 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5):
             drift_direction = 0.0
             drift_percentage = 0.0
 
-        projection_series = []
         current_simulated_price = float(latest_close)
         future_dates = pd.date_range(start=pd.Timestamp.now() + pd.Timedelta(days=1), periods=forecast_periods, freq='B')
+        projection_values = []
 
-        for date in future_dates:
+        for _ in future_dates:
             step_change = current_simulated_price * drift_percentage * drift_direction
             current_simulated_price += step_change
-            projection_series.append({
-                "Date": date.strftime('%Y-%m-%d'),
-                "Projected Target": round(current_simulated_price, 2)
-            })
+            projection_values.append(round(current_simulated_price, 2))
 
-        projection_df = pd.DataFrame(projection_series)
+        projection_df = pd.DataFrame({
+            "Date": future_dates.strftime('%Y-%m-%d'),
+            "Projected Target": projection_values
+        })
+        projection_df["Projected Target"] = pd.to_numeric(projection_df["Projected Target"], errors="coerce")
+        projection_df = projection_df.dropna(subset=["Projected Target"])
+
+        if projection_df.empty:
+            return None
+
         projection_df.set_index("Date", inplace=True)
         projection_df.index = pd.to_datetime(projection_df.index)
-
-        if projection_df.empty or projection_df["Projected Target"].isna().all():
-            return None
+        projection_df.index.name = "Date"
 
         return projection_df
 

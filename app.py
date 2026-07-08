@@ -63,8 +63,17 @@ def parse_llm_response_for_forecast(llm_text_response):
                         
         if len(projection_series) == 0:
             return None
-            
-        return pd.DataFrame(projection_series)
+
+        projection_df = pd.DataFrame(projection_series)
+        projection_df["Projected Target"] = pd.to_numeric(projection_df["Projected Target"], errors="coerce")
+        projection_df = projection_df.dropna(subset=["Projected Target"])
+        if projection_df.empty:
+            return None
+
+        projection_df.set_index("Date", inplace=True)
+        projection_df.index = pd.to_datetime(projection_df.index)
+        projection_df.index.name = "Date"
+        return projection_df
     except Exception as e:
         print(f"[SYSTEM ALARM] Token tracking exception parsed: {str(e)}")
         return None
@@ -175,6 +184,8 @@ if "staged_trend_data" not in st.session_state:
     st.session_state.staged_trend_data = None
 if "staged_llm_text" not in st.session_state:
     st.session_state.staged_llm_text = None
+if "staged_fallback_price" not in st.session_state:
+    st.session_state.staged_fallback_price = None
 
 # Sidebar System Controls
 st.sidebar.markdown("<h3 style='color:#b97d10; text-shadow: 0 0 5px #b97d10;'>🛡️ ARMOR DIAGNOSTICS</h3>", unsafe_allow_html=True)
@@ -267,9 +278,14 @@ for index, message in enumerate(st.session_state.messages):
             st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 PROJECTED HORIZON DATASTREAM:</span>", unsafe_allow_html=True)
             
             # Retrieve data points correctly
-            forecast_data = parse_llm_response_for_forecast(message["llm_source_text"])
+            forecast_data = parse_llm_response_for_forecast(message.get("llm_source_text", ""))
             if forecast_data is None:
-                forecast_data = generate_forecast_chart_data(message["ticker"], message["trend_data"], forecast_periods=5)
+                forecast_data = generate_forecast_chart_data(
+                    message.get("ticker"),
+                    message.get("trend_data"),
+                    forecast_periods=5,
+                    fallback_price=message.get("fallback_price")
+                )
                 
             if forecast_data is not None and not forecast_data.empty:
                 if not isinstance(forecast_data.index, pd.DatetimeIndex):
@@ -336,7 +352,8 @@ if processed_prompt:
                 "type": "forecast_chart",
                 "ticker": st.session_state.active_ticker,
                 "trend_data": st.session_state.staged_trend_data,
-                "llm_source_text": st.session_state.staged_llm_text
+                "llm_source_text": st.session_state.staged_llm_text,
+                "fallback_price": st.session_state.staged_fallback_price
             })
             jarvis_response = f"Understood, sir. Initializing rendering sequences. Visual forecast tracks for the {st.session_state.active_ticker} vector have been securely committed to the logs above."
         elif is_negation:
@@ -352,6 +369,7 @@ if processed_prompt:
         })
         st.session_state.staged_trend_data = None
         st.session_state.staged_llm_text = None
+        st.session_state.staged_fallback_price = None
         save_chat_session(st.session_state.messages)
             
     else:
@@ -391,6 +409,7 @@ if processed_prompt:
                 
                 st.session_state.staged_trend_data = trend_data
                 st.session_state.staged_llm_text = base_forecast
+                st.session_state.staged_fallback_price = price_data.get("price") if price_data.get("status") == "success" else None
                 st.session_state.awaiting_graph_confirmation = True
                 st.session_state.messages.append({
                     "role": "assistant", 
