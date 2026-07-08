@@ -1,8 +1,10 @@
+import streamlit as st
 import yfinance as yf
 from nsepython import nse_eq, nse_quote_ltp
 import pandas as pd
 import json
 import os
+import requests
 
 try:
     from tradingview_ta import TA_Handler, Interval
@@ -59,28 +61,76 @@ def fetch_live_stock_price(ticker):
         except Exception as inner_error:
             return {"status": "error", "message": f"All connection endpoints failed. Primary: {str(e)}. Fallback: {str(inner_error)}"}
 
+"""Scrapes market news using Yahoo Finance. If empty or missing, falls back dynamically to GNews API for cloud-safe global macro context."""
+
 def fetch_market_news(ticker):
     """
-    Scrapes real-time market news summaries using Yahoo Finance vectors.
+    Scrapes market news using Yahoo Finance. If empty or missing, 
+    falls back dynamically to GNews API for cloud-safe global macro context.
     """
+    clean_ticker = str(ticker).upper().strip()
+    compiled_headlines = ""
+    
+    # --- STEP 1: PRIMARY ATTEMPT (Yahoo Finance) ---
     try:
-        clean_ticker = str(ticker).upper().strip()
         yf_symbol = f"{clean_ticker}.NS"
         yf_ticker = yf.Ticker(yf_symbol)
         news_list = yf_ticker.news
         
-        if not news_list:
-            return f"No synchronized mainstream headlines available for {clean_ticker} vector at this period."
-            
-        compiled_headlines = ""
-        for index, item in enumerate(news_list[:3]):
-            title = item.get('title')
-            publisher = item.get('publisher')
-            compiled_headlines += f"[{index+1}] \"{title}\" via {publisher}\n"
-            
-        return compiled_headlines
+        if news_list:
+            for index, item in enumerate(news_list[:3]):
+                title = item.get('title')
+                publisher = item.get('publisher')
+                compiled_headlines += f"[{index+1}] \"{title}\" via {publisher}\n"
     except Exception as e:
-        return f"News diagnostic link unresponsive: {str(e)}"
+        print(f"[SYSTEM WARN] Yahoo News stream failed/unresponsive: {str(e)}")
+
+    # If Yahoo found usable news headers, return them immediately
+    if compiled_headlines.strip():
+        return compiled_headlines
+
+    # --- STEP 2: CLOUD FALLBACK ATTEMPT (GNews API) ---
+    # Fetch from Streamlit secrets context on Streamlit Cloud
+    api_key = os.getenv("GNEWS_API_KEY") or (st.secrets["GNEWS_API_KEY"] if "GNEWS_API_KEY" in st.secrets else None)
+    
+    if not api_key:
+        return f"No synchronized mainstream headlines available for {clean_ticker} from Yahoo, and GNEWS_API_KEY is missing for cloud fallback."
+
+    # Translate local ETF tokens to broad financial trends optimized for search index matches
+    query_map = {
+        "GOLDBEES": '"gold price" OR "gold market"',
+        "SILVERBEES": '"silver price" OR "silver market"',
+        "NIFTYBEES": '"Nifty 50" OR "Indian stock market"'
+    }
+    search_query = query_map.get(clean_ticker, clean_ticker)
+    
+    # GNews API endpoint structure
+    url = f"https://gnews.io/api/v4/search?q={search_query}&lang=en&max=3&apikey={api_key}"
+    
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            articles = response.json().get("articles", [])
+            if articles:
+                compiled_headlines += "--- Cloud Fallback Context Matrix (GNews) ---\n"
+                for index, art in enumerate(articles):
+                    title = art.get('title')
+                    source_name = art.get('source', {}).get('name', 'Unknown Source')
+                    description = art.get('description', '')
+                    snippet = description[:150] + "..." if description and len(description) > 150 else description
+                    
+                    compiled_headlines += f"[{index+1}] \"{title}\" via {source_name}\nSnippet: {snippet}\n\n"
+        else:
+            print(f"[SYSTEM WARN] GNews API returned status code: {response.status_code}")
+                    
+    except Exception as fallback_error:
+        print(f"[SYSTEM ALARM] GNews backup stream threw an error: {str(fallback_error)}")
+
+    # Final validation check
+    if not compiled_headlines.strip():
+        return f"No synchronized mainstream headlines available for {clean_ticker} vector across primary and cloud fallback nodes."
+        
+    return compiled_headlines
 
 def fetch_gold_trend_analysis(ticker, period="1mo"):
     """
