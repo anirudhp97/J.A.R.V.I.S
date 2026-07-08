@@ -10,3 +10,4 @@ pydub
 audiofile
 edge-tts
 tradingview-ta
+requests
