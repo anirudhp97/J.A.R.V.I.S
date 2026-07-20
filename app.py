@@ -293,6 +293,18 @@ for index, message in enumerate(st.session_state.messages):
                 scenarios = [col for col in ["Base Target", "Bullish Target", "Bearish Target"] if col in forecast_data.columns]
                 if scenarios:
                     st.line_chart(forecast_data[scenarios], color=["#00E5FF", "#4AF2A1", "#FF4A4A"])
+                    table_df = forecast_data.reset_index().melt(
+                        id_vars=["Date"],
+                        value_vars=scenarios,
+                        var_name="Trajectory Model",     # <-- Renames 'color -- streamlit-generated'
+                        value_name="Target Price (₹)"    # <-- Renames 'value -- streamlit-generated'
+                    )
+            
+                    # Format Date for clean display
+                    table_df["Date"] = table_df["Date"].dt.strftime('%Y-%m-%d')
+            
+                    # Display formatted table
+                    st.dataframe(table_df, use_container_width=True, hide_index=True)
                     st.caption(
                         f"Telemetry simulation mapping for {message.get('ticker', st.session_state.active_ticker)}. "
                         "🟢 Green: Bullish Path | 🔵 Cyan: Expected Base | 🔴 Red: Bearish Path."
