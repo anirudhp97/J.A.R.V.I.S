@@ -117,15 +117,6 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
         "3. Balance structural news narratives against the hard mathematical oscillator summary from TradingView to eliminate directional blindspots.\n"
         "4. Do not offer bland generic trading disclosures or tell the user to consult a financial planner. Tony Stark makes his own decisions.\n"
         "5. Be specific, numbers-driven, and brief. Keep your response under 5-6 concise sentences maximum.\n"
-        "6. DATASTREAM REQUIREMENT: At the very end of your response, output a structured table block for 5 upcoming trading days formatted EXACTLY like this:\n"
-        "DATASTREAM_START\n"
-        "Date | Projected Target\n"
-        "YYYY-MM-DD | <numeric_value>\n"
-        "YYYY-MM-DD | <numeric_value>\n"
-        "YYYY-MM-DD | <numeric_value>\n"
-        "YYYY-MM-DD | <numeric_value>\n"
-        "YYYY-MM-DD | <numeric_value>\n"
-        "DATASTREAM_END"
     )
     
     if tv_gauge and tv_gauge.get("status") == "success":
