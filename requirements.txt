@@ -11,3 +11,4 @@ audiofile
 edge-tts
 tradingview-ta
 requests
+nest-asyncio
