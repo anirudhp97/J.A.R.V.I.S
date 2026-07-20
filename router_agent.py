@@ -110,9 +110,22 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
         "Address the user as 'sir'. You are evaluating financial telemetry for specified asset vectors.\n\n"
         "CRITICAL DIRECTIVES:\n"
         "1. Synthesize market prices, SMA momentum deviations, multi-indicator TradingView consensus data, and recent headlines directly into a high-fidelity macro outlook.\n"
-        "2. Balance structural news narratives against the hard mathematical oscillator summary from TradingView to eliminate directional blindspots.\n"
-        "3. Do not offer bland generic trading disclosures or tell the user to consult a financial planner. Tony Stark makes his own decisions.\n"
-        "4. Be specific, numbers-driven, and brief. Keep your response under 4-5 concise sentences maximum."
+        "2. Avoid linear prediction bias. You MUST present a balanced, two-sided tactical forecast:\n"
+        "   - Outlining the BULLISH boundary case (upward target levels if current momentum sustains or reverses upward).\n"
+        "   - Outlining the BEARISH boundary case (downward target support levels if momentum corrects or encounters resistance).\n"
+        "   - Specifying a clear, calculated expected price range (e.g., 'Rs. X to Rs. Y') for the upcoming sessions to account for market volatility.\n"
+        "3. Balance structural news narratives against the hard mathematical oscillator summary from TradingView to eliminate directional blindspots.\n"
+        "4. Do not offer bland generic trading disclosures or tell the user to consult a financial planner. Tony Stark makes his own decisions.\n"
+        "5. Be specific, numbers-driven, and brief. Keep your response under 5-6 concise sentences maximum.\n"
+        "6. DATASTREAM REQUIREMENT: At the very end of your response, output a structured table block for 5 upcoming trading days formatted EXACTLY like this:\n"
+        "DATASTREAM_START\n"
+        "Date | Projected Target\n"
+        "YYYY-MM-DD | <numeric_value>\n"
+        "YYYY-MM-DD | <numeric_value>\n"
+        "YYYY-MM-DD | <numeric_value>\n"
+        "YYYY-MM-DD | <numeric_value>\n"
+        "YYYY-MM-DD | <numeric_value>\n"
+        "DATASTREAM_END"
     )
     
     if tv_gauge and tv_gauge.get("status") == "success":
@@ -123,11 +136,20 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
     else:
         tv_telemetry = "TradingView Indicator Summary: Data Connection Stream Unavailable.\n"
 
+    current_price = price_data.get('price')
+    sma_baseline = trend_data.get('sma_baseline')
+    deviation_pct = trend_data.get('deviation_pct', 0)
+    
+    approx_daily_vol = 0.015
+    projected_upper = round(current_price * (1 + (approx_daily_vol * 2.23)), 2) if current_price else "N/A"
+    projected_lower = round(current_price * (1 - (approx_daily_vol * 2.23)), 2) if current_price else "N/A"
+
     context = (
         f"Target Core Vector Identification: {ticker}\n"
-        f"Exchange Last Traded Price (LTP): Rs. {price_data.get('price')} via National Stock Exchange\n"
-        f"Historical Asset Baseline: 20-Day Dynamic Rolling Simple Moving Average is Rs. {trend_data.get('sma_baseline')} calculated over {trend_data.get('sma_days')} trading sessions\n"
-        f"Current Momentum State: {trend_data.get('momentum')} (Asset is currently {trend_data.get('deviation_pct')}% away from its trailing baseline)\n"
+        f"Exchange Last Traded Price (LTP): Rs. {current_price} via National Stock Exchange\n"
+        f"Historical Asset Baseline: 20-Day Dynamic Rolling Simple Moving Average is Rs. {sma_baseline} calculated over {trend_data.get('sma_days')} trading sessions\n"
+        f"Current Momentum State: {trend_data.get('momentum')} (Asset is currently {deviation_pct}% away from its trailing baseline)\n"
+        f"Rough Boundary Approximations (1-Week Horizon): Bullish Target Cap ~ Rs. {projected_upper} | Bearish Support Floor ~ Rs. {projected_lower}\n"
         f"{tv_telemetry}"
         f"Recent Market News Context:\n{news_headlines}\n"
     )
@@ -140,7 +162,7 @@ def generate_financial_forecast(user_query, price_data, news_headlines, trend_da
                 {"role": "user", "content": f"Context Metrics:\n{context}\n\nUser Predictive Request: {user_query}"}
             ],
             temperature=0.5,
-            max_tokens=300
+            max_tokens=450
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
@@ -156,8 +178,17 @@ def get_tts_bytes(text):
                 audio_data += chunk["data"]
         return audio_data
     try:
-        audio_bytes = asyncio.run(generate_audio())
-        return io.BytesIO(audio_bytes).getvalue()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import nest_asyncio
+            nest_asyncio.apply()
+            return loop.run_until_complete(generate_audio())
+        else:
+            return asyncio.run(generate_audio())
     except Exception as e:
         print(f"TTS Framework Error: {str(e)}")
         return None

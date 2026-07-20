@@ -26,7 +26,7 @@ def parse_llm_response_for_forecast(llm_text_response):
     Scans J.A.R.V.I.S.'s verbal text string for a structured DATASTREAM block
     and dynamically converts those exact numbers into a rendering DataFrame.
     """
-    if "DATASTREAM_START" not in llm_text_response:
+    if not llm_text_response or "DATASTREAM_START" not in llm_text_response:
         return None
         
     try:
@@ -52,7 +52,6 @@ def parse_llm_response_for_forecast(llm_text_response):
                     if date_str == "Date" or "---" in date_str:
                         continue
                     try:
-                        # Strip any stray currency signs or characters
                         val_clean = re.sub(r'[^\d.]', '', val_str)
                         projection_series.append({
                             "Date": date_str,
@@ -110,7 +109,6 @@ def get_saved_ticker_from_query():
             return ticker_param
     return None
 
-
 def get_saved_timeframe_from_query():
     timeframe_param = st.query_params.get("timeframe") if hasattr(st, "query_params") else None
     if isinstance(timeframe_param, (list, tuple)):
@@ -120,7 +118,6 @@ def get_saved_timeframe_from_query():
         if timeframe_param in ["5d", "1mo", "3mo", "1y"]:
             return timeframe_param
     return None
-
 
 def render_tradingview_gauge_ui(ticker):
     """
@@ -151,7 +148,7 @@ def render_tradingview_gauge_ui(ticker):
     </div> """
     components.html(tv_html, height=360)
 
-# Initialize Session State Machine Variables with local archival check
+# Initialize Session State Machine Variables
 if "active_ticker" not in st.session_state:
     st.session_state.active_ticker = get_saved_ticker_from_query() or "GOLDBEES"
 
@@ -163,7 +160,6 @@ if "messages" not in st.session_state:
     if saved_history:
         st.session_state.messages = saved_history
 
-        # Restore the last known ticker only when no selection has been made yet.
         if st.session_state.active_ticker == "GOLDBEES":
             last_ticker = "GOLDBEES"
             for msg in reversed(saved_history):
@@ -196,25 +192,23 @@ try:
 except ValueError:
     current_ticker_index = 0
 
+def update_ticker():
+    # Native callback executed before script execution
+    st.session_state.active_ticker = st.session_state.ticker_select_widget
+    st.query_params["ticker"] = st.session_state.ticker_select_widget
+
 selected_ticker = st.sidebar.selectbox(
-    "Select Target Core Vector:", 
-    options=ticker_options, 
+    "Select Target Core Vector:",
+    options=ticker_options,
     index=current_ticker_index,
     key="ticker_select_widget",
+    on_change=update_ticker,
     format_func=lambda x: {
-        "GOLDBEES": "🥇 GOLD BeES Monitor", 
-        "SILVERBEES": "🥈 SILVER BeES Monitor", 
-        "NIFTYBEES": "📈 NIFTY BeES Index"
-    }.get(x, x)
+        "GOLDBEES": "🥇 GOLD BeES Monitor",
+        "SILVERBEES": "🥈 SILVER BeES Monitor",
+        "NIFTYBEES": "📈 NIFTY BeES Index",
+    }.get(x, x),
 )
-
-if selected_ticker != st.session_state.active_ticker:
-    st.session_state.active_ticker = selected_ticker
-
-try:
-    st.query_params["ticker"] = st.session_state.active_ticker
-except Exception:
-    pass
 
 timeframe_options = ["5d", "1mo", "3mo", "1y"]
 try:
@@ -222,22 +216,18 @@ try:
 except ValueError:
     current_timeframe_index = 1
 
+def update_timeframe():
+    st.session_state.selected_timeframe = st.session_state.timeframe_select_widget
+    st.query_params["timeframe"] = st.session_state.timeframe_select_widget
+
 selected_timeframe = st.sidebar.selectbox(
     "Select Trajectory Horizon:",
     options=timeframe_options,
     index=current_timeframe_index,
     key="timeframe_select_widget",
+    on_change=update_timeframe,
     format_func=lambda x: {"5d": "Past Week [5 Days]", "1mo": "Past Month [30 Days]", "3mo": "Quarterly Trend [3M]", "1y": "Annual Trend [1Y]"}[x]
 )
-
-if selected_timeframe != st.session_state.selected_timeframe:
-    st.session_state.selected_timeframe = selected_timeframe
-
-try:
-    st.query_params["ticker"] = st.session_state.active_ticker
-    st.query_params["timeframe"] = st.session_state.selected_timeframe
-except Exception:
-    pass
 
 st.sidebar.markdown(f"""
 <div style='border: 1px solid #b97d10; padding: 12px; border-radius: 4px; background-color: rgba(170,5,5,0.15); margin-top: 25px; margin-bottom: 15px;'>
@@ -275,25 +265,40 @@ for index, message in enumerate(st.session_state.messages):
                         st.session_state.audio_played = True
                         
         elif message["type"] == "forecast_chart":
-            st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 PROJECTED HORIZON DATASTREAM:</span>", unsafe_allow_html=True)
+            st.markdown(f"<span style='color:{text_color}; font-weight:bold;'>📊 MULTI-SCENARIO PROJECTED HORIZON:</span>", unsafe_allow_html=True)
             
-            # Retrieve data points correctly
+            # 1. Parse structured DATASTREAM block from LLM string output
             forecast_data = parse_llm_response_for_forecast(message.get("llm_source_text", ""))
+            
+            # 2. Fallback to math-driven multi-scenario engine if needed
             if forecast_data is None:
+                ticker = message.get("ticker", st.session_state.active_ticker)
+                trend_data = message.get("trend_data")
+                fallback_price = message.get("fallback_price")
+                
+                if not trend_data or not isinstance(trend_data, dict):
+                    trend_data = fetch_gold_trend_analysis(ticker, period=st.session_state.selected_timeframe)
+                
                 forecast_data = generate_forecast_chart_data(
-                    message.get("ticker"),
-                    message.get("trend_data"),
+                    ticker,
+                    trend_data,
                     forecast_periods=5,
-                    fallback_price=message.get("fallback_price")
+                    fallback_price=fallback_price
                 )
                 
             if forecast_data is not None and not forecast_data.empty:
                 if not isinstance(forecast_data.index, pd.DatetimeIndex):
                     forecast_data.index = pd.to_datetime(forecast_data.index)
 
-                if "Projected Target" in forecast_data.columns and forecast_data["Projected Target"].notna().any():
+                scenarios = [col for col in ["Base Target", "Bullish Target", "Bearish Target"] if col in forecast_data.columns]
+                if scenarios:
+                    st.line_chart(forecast_data[scenarios], color=["#00E5FF", "#4AF2A1", "#FF4A4A"])
+                    st.caption(
+                        f"Telemetry simulation mapping for {message.get('ticker', st.session_state.active_ticker)}. "
+                        "🟢 Green: Bullish Path | 🔵 Cyan: Expected Base | 🔴 Red: Bearish Path."
+                    )
+                elif "Projected Target" in forecast_data.columns:
                     st.line_chart(forecast_data, y="Projected Target", color="#ffaa00")
-                    st.caption(f"Predictive tracking simulation captured from vector context data matrix for {message['ticker']}.")
                 else:
                     st.error("Sir, target graphical datablock contains no usable numeric values.")
             else:
@@ -335,7 +340,6 @@ if processed_prompt:
     is_confirmation = any(clean_prompt.startswith(word) for word in ["YES", "YEA", "OK", "PLEASE", "SURE", "GO AHEAD", "GENERATE", "PROJECT"])
     is_negation = any(clean_prompt.startswith(word) for word in ["NO", "DON'T", "STOP", "NEVER", "SKIP", "NAH"])
     
-    # Store ticker context metadata inside user message to help state restoration during refresh
     st.session_state.messages.append({
         "role": "user", 
         "type": "text", 
@@ -381,7 +385,7 @@ if processed_prompt:
         
         with st.spinner("J.A.R.V.I.S. is compiling data streams..."):
             intent = classify_intent(processed_prompt)
-            trend_data = fetch_gold_trend_analysis(target_ticker, period=selected_timeframe)
+            trend_data = fetch_gold_trend_analysis(target_ticker, period=st.session_state.selected_timeframe)
             price_data = fetch_live_stock_price(target_ticker)
             
             if intent == "LIVE":
@@ -399,7 +403,7 @@ if processed_prompt:
                     
             elif intent == "NEWS":
                 news_headlines = fetch_market_news(target_ticker)
-                tv_gauge = fetch_tradingview_gauge(target_ticker, timeframe=selected_timeframe)
+                tv_gauge = fetch_tradingview_gauge(target_ticker, timeframe=st.session_state.selected_timeframe)
                 
                 base_forecast = generate_financial_forecast(
                     processed_prompt, price_data, news_headlines, trend_data, tv_gauge, ticker=target_ticker

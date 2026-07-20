@@ -5,6 +5,7 @@ import pandas as pd
 import json
 import os
 import requests
+import numpy as np
 
 try:
     from tradingview_ta import TA_Handler, Interval
@@ -61,8 +62,6 @@ def fetch_live_stock_price(ticker):
         except Exception as inner_error:
             return {"status": "error", "message": f"All connection endpoints failed. Primary: {str(e)}. Fallback: {str(inner_error)}"}
 
-"""Scrapes market news using Yahoo Finance. If empty or missing, falls back dynamically to GNews API for cloud-safe global macro context."""
-
 def fetch_market_news(ticker):
     """
     Scrapes market news using Yahoo Finance. If empty or missing, 
@@ -85,18 +84,15 @@ def fetch_market_news(ticker):
     except Exception as e:
         print(f"[SYSTEM WARN] Yahoo News stream failed/unresponsive: {str(e)}")
 
-    # If Yahoo found usable news headers, return them immediately
     if compiled_headlines.strip():
         return compiled_headlines
 
     # --- STEP 2: CLOUD FALLBACK ATTEMPT (GNews API) ---
-    # Fetch from Streamlit secrets context on Streamlit Cloud
     api_key = os.getenv("GNEWS_API_KEY") or (st.secrets["GNEWS_API_KEY"] if "GNEWS_API_KEY" in st.secrets else None)
     
     if not api_key:
         return f"No synchronized mainstream headlines available for {clean_ticker} from Yahoo, and GNEWS_API_KEY is missing for cloud fallback."
 
-    # Translate local ETF tokens to broad financial trends optimized for search index matches
     query_map = {
         "GOLDBEES": '"gold price" OR "gold market"',
         "SILVERBEES": '"silver price" OR "silver market"',
@@ -104,7 +100,6 @@ def fetch_market_news(ticker):
     }
     search_query = query_map.get(clean_ticker, clean_ticker)
     
-    # GNews API endpoint structure
     url = f"https://gnews.io/api/v4/search?q={search_query}&lang=en&max=3&apikey={api_key}"
     
     try:
@@ -126,7 +121,6 @@ def fetch_market_news(ticker):
     except Exception as fallback_error:
         print(f"[SYSTEM ALARM] GNews backup stream threw an error: {str(fallback_error)}")
 
-    # Final validation check
     if not compiled_headlines.strip():
         return f"No synchronized mainstream headlines available for {clean_ticker} vector across primary and cloud fallback nodes."
         
@@ -229,8 +223,8 @@ def fetch_tradingview_gauge(ticker, timeframe="1d"):
 
 def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5, fallback_price=None):
     """
-    Generates a momentum-based drift projection using a live-price fallback when
-    trend data is unavailable or partially corrupted.
+    Generates a dynamic multi-scenario projection (Base, Bullish, Bearish) 
+    by calculating the historical volatility from the underlying history.
     """
     try:
         latest_close = None
@@ -256,48 +250,59 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5, fallbac
         except (TypeError, ValueError):
             return None
 
-        if pd.isna(latest_close):
-            return None
-
+        clean_ticker = str(ticker).upper().strip()
+        yf_symbol = f"{clean_ticker}.NS"
+        yf_ticker = yf.Ticker(yf_symbol)
+        history = yf_ticker.history(period="1mo")
+        
+        if not history.empty and len(history) > 2:
+            history['Log_Ret'] = np.log(history['Close'] / history['Close'].shift(1))
+            daily_volatility = history['Log_Ret'].std()
+            if pd.isna(daily_volatility) or daily_volatility == 0:
+                daily_volatility = 0.015
+        else:
+            daily_volatility = 0.015
+            
         try:
             deviation_pct = float(deviation_pct)
         except (TypeError, ValueError):
             deviation_pct = 0.0
 
-        if deviation_pct is None or pd.isna(deviation_pct):
-            deviation_pct = 0.0
-
         drift_percentage = (deviation_pct / 100) / 10.0
         if "BULLISH" in momentum_str:
             drift_direction = 1.0
-            if drift_percentage <= 0:
-                drift_percentage = 0.001
         elif "BEARISH" in momentum_str:
             drift_direction = -1.0
-            if drift_percentage >= 0:
-                drift_percentage = -0.001
         else:
             drift_direction = 0.0
-            drift_percentage = 0.0
 
-        current_simulated_price = float(latest_close)
         future_dates = pd.date_range(start=pd.Timestamp.now() + pd.Timedelta(days=1), periods=forecast_periods, freq='B')
-        projection_values = []
+        
+        base_series = []
+        bull_series = []
+        bear_series = []
 
-        for _ in future_dates:
-            step_change = current_simulated_price * drift_percentage * drift_direction
-            current_simulated_price += step_change
-            projection_values.append(round(current_simulated_price, 2))
+        curr_base = latest_close
+
+        for i in range(1, forecast_periods + 1):
+            step_change = curr_base * drift_percentage * drift_direction
+            curr_base += step_change
+            
+            vol_multiplier = daily_volatility * np.sqrt(i)
+            
+            curr_bull = curr_base * (1 + vol_multiplier)
+            curr_bear = curr_base * (1 - vol_multiplier)
+
+            base_series.append(round(curr_base, 2))
+            bull_series.append(round(curr_bull, 2))
+            bear_series.append(round(curr_bear, 2))
 
         projection_df = pd.DataFrame({
             "Date": future_dates.strftime('%Y-%m-%d'),
-            "Projected Target": projection_values
+            "Base Target": base_series,
+            "Bullish Target": bull_series,
+            "Bearish Target": bear_series
         })
-        projection_df["Projected Target"] = pd.to_numeric(projection_df["Projected Target"], errors="coerce")
-        projection_df = projection_df.dropna(subset=["Projected Target"])
-
-        if projection_df.empty:
-            return None
 
         projection_df.set_index("Date", inplace=True)
         projection_df.index = pd.to_datetime(projection_df.index)
@@ -306,7 +311,7 @@ def generate_forecast_chart_data(ticker, trend_data, forecast_periods=5, fallbac
         return projection_df
 
     except Exception as e:
-        print(f"Error in forecast engine for {ticker}: {str(e)}")
+        print(f"Error in multi-scenario forecast engine for {ticker}: {str(e)}")
         return None
 
 # ===================================================
